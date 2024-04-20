@@ -13,7 +13,7 @@ struct Popen2Runtime {
 
 void C5T_POPEN2(
     std::vector<std::string> const& cmdline,
-    std::function<void(const std::string&)> cb_stdout_line,
+    std::function<void(std::string)> cb_stdout_line,
     std::function<void(Popen2Runtime&)> cb_user_code = [](Popen2Runtime&) {},
-    std::function<void(const std::string&)> cb_stderr_line = [](std::string const&) {},
+    std::function<void(std::string)> cb_stderr_line = [](std::string const&) {},
     std::vector<std::string> const& env = {});

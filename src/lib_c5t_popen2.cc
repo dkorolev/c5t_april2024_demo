@@ -38,9 +38,9 @@ inline void CreatePipeOrFail(int r[2]) {
 }
 
 void C5T_POPEN2(std::vector<std::string> const& cmdline,
-                std::function<void(const std::string&)> cb_stdout_line,
+                std::function<void(std::string)> cb_stdout_line,
                 std::function<void(Popen2Runtime&)> cb_user_code,
-                std::function<void(const std::string&)> cb_stderr_line,
+                std::function<void(std::string)> cb_stderr_line,
                 std::vector<std::string> const& env) {
   pid_t pid;
   int pipe_stdin[2];
@@ -131,9 +131,9 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
       pipe_stdin[1],
       pid);
 
-  auto const SpawnReader = [](std::function<void(const std::string&)> cb_line, int read_fd, int efd) -> std::thread {
+  auto const SpawnReader = [](std::function<void(std::string)> cb_line, int read_fd, int efd) -> std::thread {
     return std::thread(
-        [](std::function<void(const std::string&)> cb_line, int read_fd, int efd) {
+        [](std::function<void(const std::string)> cb_line, int read_fd, int efd) {
           struct pollfd fds[2];
           fds[0].fd = read_fd;
           fds[0].events = POLLIN;
