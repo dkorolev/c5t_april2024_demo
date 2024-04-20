@@ -27,12 +27,24 @@ get "/up"
 
 echo
 
+get "/seq"
+
+echo
+
+get "/seq/100" >/dev/null &
+PID=$1
+sleep 0.25
+get "/tasks"
+
+echo
+
 get "/stop"
 
 echo
 sleep 0.25
 
 wait $PID
+echo
 echo done
 
 echo

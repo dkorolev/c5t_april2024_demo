@@ -2,11 +2,17 @@
 #include "bricks/dflags/dflags.h"
 #include "bricks/sync/waitable_atomic.h"
 
+#include "lib_c5t_popen2.h"  // IWYU pragma: keep
+#include "lib_c5t_lifetime_manager.h"
+
 DEFINE_uint16(port, 5555, "");
 
 int main(int argc, char** argv) {
   ParseDFlags(&argc, &argv);
 
+  LIFETIME_MANAGER_SET_LOGGER([](std::string const& s) { std::cout << "C5T lifetime: " << s << std::endl; });
+
+  // NOTE(dkorolev): Current's `HTTP()` server is not friendly with graceful termination, so use this workaround.
   current::WaitableAtomic<bool> time_to_stop_http_server_and_die(false);
 
   auto& http = []() -> current::http::HTTPServerPOSIX& {
@@ -39,7 +45,46 @@ int main(int argc, char** argv) {
     time_to_stop_http_server_and_die.SetValue(true);
   });
 
+  routes += http.Register("/seq", URLPathArgs::CountMask::None | URLPathArgs::CountMask::One, [](Request r) {
+    LIFETIME_TRACKED_THREAD(
+        "chunked response sender",
+        [](Request r) {
+          std::string N = "5";
+          if (r.url_path_args.size() >= 1u) {
+            N = r.url_path_args[0];
+          }
+          std::string cmd = "for i in $(seq " + N + "); do echo $i; sleep 0.05; done";
+          auto rc = r.SendChunkedResponse();
+          LIFETIME_TRACKED_POPEN2(cmd, {"bash", "-c", cmd}, [&rc](std::string const& s) { rc(s + '\n'); });
+        },
+        std::move(r));
+  });
+
+  routes += http.Register("/tasks", [](Request r) {
+    std::ostringstream oss;
+    int n = 0u;
+    LIFETIME_TRACKED_DEBUG_DUMP([&oss, &n](LifetimeTrackedInstance const& t) {
+      if (!n) {
+        oss << "running tasks:\n";
+      }
+      ++n;
+      oss << current::strings::Printf("%d) %s @ %s:%d, up %.3lfs",
+                                      n,
+                                      t.description.c_str(),
+                                      t.file_basename.c_str(),
+                                      t.line_as_number,
+                                      1e-6 * (current::time::Now() - t.t_added).count())
+          << std::endl;
+    });
+    if (!n) {
+      oss << "no running tasks\n";
+    }
+    r(oss.str());
+  });
+
   time_to_stop_http_server_and_die.Wait();
   std::cout << "terminating per user request" << std::endl;
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  LIFETIME_MANAGER_EXIT(0);
+  std::cerr << "should not see this" << std::endl;
 }
