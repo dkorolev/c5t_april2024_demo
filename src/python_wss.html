@@ -1,0 +1,58 @@
+<!DOCTYPE HTML>
+<html>
+  <head><title>current python wss demo</title></head>
+  <body>
+    <p><div id="status">initializing ...</div></p>
+    <form id="form">
+      <input type="text" id="cmd" name="cmd" placeholder="type here, clear to clear, stop to stop server" size="50" />
+      <button type="submit">Enter</button>
+    </form>
+    <p><div id="out"></p>
+    <script>
+      const wsurl = (() => {
+        const l = window.location;
+        return `ws://${l.hostname}:5556/ws/test`;
+      })();
+      let ws = null;
+      const e_status = document.getElementById("status");
+      const e_cmd = document.getElementById("cmd");
+      const e_form = document.getElementById("form");
+      const e_out = document.getElementById("out");
+      const doSubmit = (e) => {
+        e.preventDefault();
+        if (ws) {
+          const cmd = e_cmd.value;
+          if (cmd === "clear") {
+            e_out.innerText = "$ clear\ncleared\n";
+          } else {
+            ws.send(cmd);
+            e_out.innerText = e_out.innerText + "$ " + cmd + "\n";
+          }
+        }
+        e_cmd.value = "";
+      };
+      e_form.addEventListener("submit", doSubmit);
+      e_cmd.focus();
+      const runWs = () => {
+        if ("WebSocket" in window) {
+          ws = new WebSocket(wsurl);
+          ws.onopen = () => {
+            e_status.innerText = "connected";
+          };
+          ws.onmessage = (e) => {
+            e_status.innerHTML = "connected";
+            e_out.innerText = e_out.innerText + e.data + "\n";
+          };
+          ws.onclose = () => {
+            e_status.innerText = "server disconnected";
+            ws = null;
+            setTimeout(runWs, 500);
+          };
+        } else {
+          e_status.innerText = "websockets are not supported";
+        }
+      };
+      runWs();
+    </script>
+  </body>
+</html>
