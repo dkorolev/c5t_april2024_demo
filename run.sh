@@ -34,3 +34,6 @@ sleep 0.25
 
 wait $PID
 echo done
+
+echo
+make test
