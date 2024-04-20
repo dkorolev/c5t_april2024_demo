@@ -1,0 +1,11 @@
+# The `Makefile` grabs the latest `CMakeLists.txt`.
+CMakeLists.txt
+
+.current/
+.current_debug/
+
+current/
+
+*.swp
+*.swo
+.exrc
