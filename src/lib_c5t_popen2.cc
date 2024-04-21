@@ -6,7 +6,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <sys/eventfd.h>
 #include <poll.h>
 
 #include <string>
@@ -42,7 +41,6 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
                 std::function<void(Popen2Runtime&)> cb_user_code,
                 std::function<void(std::string)> cb_stderr_line,
                 std::vector<std::string> const& env) {
-  pid_t pid;
   int pipe_stdin[2];
   int pipe_stdout[2];
   int pipe_stderr[2];
@@ -51,19 +49,8 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
   CreatePipeOrFail(pipe_stdout);
   CreatePipeOrFail(pipe_stderr);
 
-  int const efd_stdout = eventfd(0, 0);
-  if (efd_stdout < 0) {
-    std::cerr << "FATAL: " << __LINE__ << std::endl;
-    ::abort();
-  }
+  pid_t const pid = ::fork();
 
-  int const efd_stderr = eventfd(0, 0);
-  if (efd_stderr < 0) {
-    std::cerr << "FATAL: " << __LINE__ << std::endl;
-    ::abort();
-  }
-
-  pid = fork();
   if (pid < 0) {
     std::cerr << "FATAL: " << __LINE__ << std::endl;
     ::abort();
@@ -72,11 +59,11 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
   if (pid == 0) {
     // Child.
     ::close(pipe_stdin[1]);
-    dup2(pipe_stdin[0], 0);
+    ::dup2(pipe_stdin[0], 0);
     ::close(pipe_stdout[0]);
-    dup2(pipe_stdout[1], 1);
+    ::dup2(pipe_stdout[1], 1);
     ::close(pipe_stderr[0]);
-    dup2(pipe_stderr[1], 2);
+    ::dup2(pipe_stderr[1], 2);
 
     if (env.empty()) {
       MutableCStyleVectorStringsArg(cmdline, [&](char* const argv[]) {
@@ -95,6 +82,12 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
     }
   }
 
+  // Parent.
+  int pipe_terminate_stdout[2];
+  int pipe_terminate_stderr[2];
+  CreatePipeOrFail(pipe_terminate_stdout);
+  CreatePipeOrFail(pipe_terminate_stderr);
+
   ::close(pipe_stdin[0]);
   ::close(pipe_stdout[1]);
   ::close(pipe_stderr[1]);
@@ -112,7 +105,7 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
       [copy_already_done_or_killed = already_done, &runtime_context](
           std::function<void(Popen2Runtime&)> cb_code, int write_fd, int pid) {
         runtime_context.write_ = [write_fd](std::string const& s) {
-          ssize_t const n = write(write_fd, s.c_str(), s.length());
+          ssize_t const n = ::write(write_fd, s.c_str(), s.length());
           if (n < 0 || static_cast<size_t>(n) != s.length()) {
             return false;
           } else {
@@ -131,13 +124,13 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
       pipe_stdin[1],
       pid);
 
-  auto const SpawnReader = [](std::function<void(std::string)> cb_line, int read_fd, int efd) -> std::thread {
+  auto const SpawnReader = [](std::function<void(std::string)> cb_line, int read_fd, int terminate_fd) -> std::thread {
     return std::thread(
-        [](std::function<void(const std::string)> cb_line, int read_fd, int efd) {
+        [](std::function<void(const std::string)> cb_line, int read_fd, int terminate_fd) {
           struct pollfd fds[2];
           fds[0].fd = read_fd;
           fds[0].events = POLLIN;
-          fds[1].fd = efd;
+          fds[1].fd = terminate_fd;
           fds[1].events = POLLIN;
 
           char buf[1000];
@@ -147,7 +140,7 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
           while (true) {
             ::poll(fds, 2, -1);
             if (fds[0].revents & POLLIN) {
-              ssize_t const n = read(read_fd, buf, sizeof(buf) - 1);
+              ssize_t const n = ::read(read_fd, buf, sizeof(buf) - 1);
               if (n < 0) {
                 // NOTE(dkorolev): This may or may not be a major issue.
                 // std::cerr << __LINE__ << std::endl;
@@ -164,21 +157,17 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
         },
         cb_line,
         read_fd,
-        efd);
+        terminate_fd);
   };
 
-  auto thread_reader_stdout = SpawnReader(std::move(cb_stdout_line), pipe_stdout[0], efd_stdout);
-  auto thread_reader_stderr = SpawnReader(std::move(cb_stderr_line), pipe_stderr[0], efd_stderr);
+  auto thread_reader_stdout = SpawnReader(std::move(cb_stdout_line), pipe_stdout[0], pipe_terminate_stdout[0]);
+  auto thread_reader_stderr = SpawnReader(std::move(cb_stderr_line), pipe_stderr[0], pipe_terminate_stderr[0]);
 
   ::waitpid(pid, NULL, 0);
   *already_done = true;
 
-  uint64_t u = 1;
-  if (write(efd_stdout, &u, sizeof(uint64_t)) != sizeof(uint64_t)) {
-    std::cerr << "FATAL: " << __LINE__ << std::endl;
-    ::abort();
-  }
-  if (write(efd_stderr, &u, sizeof(uint64_t)) != sizeof(uint64_t)) {
+  char c = '\n';
+  if ((::write(pipe_terminate_stdout[1], &c, 1) != 1) || (::write(pipe_terminate_stderr[1], &c, 1) != 1)) {
     std::cerr << "FATAL: " << __LINE__ << std::endl;
     ::abort();
   }
@@ -187,10 +176,12 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
   thread_reader_stdout.join();
   thread_reader_stderr.join();
 
-  ::close(efd_stdout);
-  ::close(efd_stderr);
-
   ::close(pipe_stdin[1]);
   ::close(pipe_stdout[0]);
   ::close(pipe_stderr[0]);
+
+  ::close(pipe_terminate_stdout[0]);
+  ::close(pipe_terminate_stdout[1]);
+  ::close(pipe_terminate_stderr[0]);
+  ::close(pipe_terminate_stderr[1]);
 }
