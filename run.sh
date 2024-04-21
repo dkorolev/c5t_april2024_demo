@@ -10,6 +10,8 @@ echo
 
 PID=$!
 
+trap "echo SIGNAL >/dev/stderr; kill $PID" EXIT
+
 sleep 0.25
 echo
 echo started
@@ -33,6 +35,7 @@ echo
 
 get "/seq/100" >/dev/null &
 PID=$1
+
 sleep 0.25
 get "/tasks"
 
@@ -44,6 +47,8 @@ echo
 sleep 0.25
 
 wait $PID
+trap - EXIT
+
 echo
 echo done
 
