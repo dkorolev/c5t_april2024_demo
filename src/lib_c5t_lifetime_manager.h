@@ -103,7 +103,7 @@ T& CreateLifetimeTrackedInstance(char const* file, int line, std::string const& 
   // Construct in a dedicated thread, so that when it's time to destruct the destructors do not block one another!
   auto& mgr = LifetimeManagerSingletonInstance();
   std::thread t(
-      [&]() {
+      [&](ARGS&&... args) {
         size_t const id = [&](ARGS&&... args) {
           T instance(std::forward<ARGS>(args)...);
           // Must ensure the thread registers its lifetime and respects the termination signal.
@@ -111,7 +111,7 @@ T& CreateLifetimeTrackedInstance(char const* file, int line, std::string const& 
           result.SetValue(&instance);
           mgr.WaitUntilTimeToDie();
           return id;
-        }();
+        }(std::forward<ARGS>(args)...);
         mgr.TrackingRemove(id);
       },
       std::forward<ARGS>(args)...);

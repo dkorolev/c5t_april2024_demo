@@ -255,7 +255,7 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
     });
 
     if (previous_value) {
-      Log("Ignoring aconsecutive call to `LIFETIME_MANAGER_EXIT()`.");
+      Log("Ignoring a consecutive call to `LIFETIME_MANAGER_EXIT()`.");
     } else {
       Log("Initating termination sequence per `LIFETIME_MANAGER_EXIT(" + current::ToString(exit_code) + ")`.");
       DoExit(exit_code, graceful_delay);
