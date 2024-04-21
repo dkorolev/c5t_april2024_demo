@@ -4,13 +4,25 @@
 #include "bricks/sync/waitable_atomic.h"
 #include "lib_c5t_popen2.h"  // IWYU pragma: keep
 #include "lib_c5t_lifetime_manager.h"
+#include "lib_c5t_logger.h"
 
 DEFINE_uint16(port, 5555, "");
 
 int main(int argc, char** argv) {
   ParseDFlags(&argc, &argv);
 
-  C5T_LIFETIME_MANAGER_SET_LOGGER([](std::string const& s) { std::cout << "C5T lifetime: " << s << std::endl; });
+  std::string const bin_path = []() {
+    std::string const argv0 = current::Singleton<dflags::Argv0Container>().argv_0;
+    std::vector<std::string> argv0_path = current::strings::Split(argv0, current::FileSystem::GetPathSeparator());
+    argv0_path.pop_back();
+    std::string const res = current::strings::Join(argv0_path, current::FileSystem::GetPathSeparator());
+    return argv0[0] == current::FileSystem::GetPathSeparator() ? "/" + res : res;
+  }();
+
+  C5T_LOGGER_SET_LOGS_DIR(bin_path);
+
+  C5T_LOGGER("demo") << "demo started";
+  C5T_LIFETIME_MANAGER_SET_LOGGER([](std::string const& s) { C5T_LOGGER("life") << s; });
 
   // NOTE(dkorolev): Using two workaround for `HTTP()` for it to work with graceful termination / lifetime management.
   // 1) [ optional ] Construct it as a `C5T_LIFETIME_MANAGER_TRACKED_INSTANCE()`, not via the `HTTP()` singleton, and
@@ -42,6 +54,7 @@ int main(int argc, char** argv) {
 
   current::WaitableAtomic<bool> time_to_stop_http_server_and_die(false);  // NOTE(dkorolev): The workaround part 2/2.
   routes += http.Register("/stop", [&time_to_stop_http_server_and_die](Request r) {
+    C5T_LOGGER("demo") << "/stop requested";
     r("stopping\n",
       HTTPResponseCode.Found,
       current::net::http::Headers({{"Location", "/up?from=stop"}, {"Cache-Control", "no-store, must-revalidate"}}),
@@ -50,6 +63,7 @@ int main(int argc, char** argv) {
   });
 
   routes += http.Register("/seq", URLPathArgs::CountMask::None | URLPathArgs::CountMask::One, [](Request r) {
+    C5T_LOGGER("demo") << "/seq requested";
     C5T_LIFETIME_MANAGER_TRACKED_THREAD(
         "chunked response sender",
         [](Request r) {
@@ -59,12 +73,18 @@ int main(int argc, char** argv) {
           }
           std::string cmd = "for i in $(seq " + N + "); do echo $i; sleep 0.05; done";
           auto rc = r.SendChunkedResponse();
-          C5T_LIFETIME_MANAGER_TRACKED_POPEN2(cmd, {"bash", "-c", cmd}, [&rc](std::string const& s) { rc(s + '\n'); });
+          C5T_LOGGER("demo") << "/seq started";
+          C5T_LIFETIME_MANAGER_TRACKED_POPEN2(cmd, {"bash", "-c", cmd}, [&rc](std::string const& s) {
+            C5T_LOGGER("demo") << "/seq: " << s;
+            rc(s + '\n');
+          });
+          C5T_LOGGER("demo") << "/seq done";
         },
         std::move(r));
   });
 
   routes += http.Register("/tasks", [](Request r) {
+    C5T_LOGGER("life") << "/tasks";
     std::ostringstream oss;
     int n = 0u;
     C5T_LIFETIME_MANAGER_TRACKED_DEBUG_DUMP([&oss, &n](LifetimeTrackedInstance const& t) {
@@ -83,14 +103,15 @@ int main(int argc, char** argv) {
     if (!n) {
       oss << "no running tasks\n";
     }
-    r(oss.str());
+    std::string const s = oss.str();
+    C5T_LOGGER("life") << s;
+    r(s);
   });
 
   time_to_stop_http_server_and_die.Wait();
   std::cout << "terminating per user request" << std::endl;
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  C5T_LIFETIME_MANAGER_SET_LOGGER([](std::string const&) {});  // Disable logging for the exit sequence.
   C5T_LIFETIME_MANAGER_EXIT(0);
   std::cerr << "should not see this!" << std::endl;
 }
