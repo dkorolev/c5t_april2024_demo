@@ -3,14 +3,15 @@
 #include <atomic>
 #include <iostream>
 
-#include <sys/types.h>
-#include <unistd.h>
-#include <sys/wait.h>
 #include <poll.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
+#include <functional>
 #include <string>
 #include <thread>
-#include <functional>
 
 #include "bricks/strings/group_by_lines.h"
 
@@ -115,7 +116,7 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
         runtime_context.kill_ = [pid, moved_already_done_or_killed = std::move(copy_already_done_or_killed)]() {
           if (!*moved_already_done_or_killed) {
             *moved_already_done_or_killed = true;
-            kill(pid, SIGTERM);
+            ::kill(pid, SIGTERM);
           }
         };
         cb_code(runtime_context);
