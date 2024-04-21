@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
     time_to_stop_http_server_and_die.SetValue(true);
   });
 
-  LIFETIME_TRACKED_THREAD(
+  C5T_LIFETIME_MANAGER_TRACKED_THREAD(
       "thread for wss.py", ([&]() {
         struct State final {
           bool dying = false;
@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
           done = true;
         });
         while (!done) {
-          LIFETIME_TRACKED_POPEN2(
+          C5T_LIFETIME_MANAGER_TRACKED_POPEN2(
               "python wss.py",
               {FLAGS_python_src},
               [&](std::string const& line) {
@@ -130,16 +130,13 @@ int main(int argc, char** argv) {
                 std::set<int> to_greet;
                 std::vector<std::pair<int, std::string>> broadcasts;
                 while (true) {
-                  wa.Wait(
-                      [](State const& s) {
-                        return s.dying || !s.to_greet.empty() || !s.broadcasts.empty();
-                      },
-                      [&](State& s) {
-                        dying = s.dying;
-                        conns = s.conns;
-                        to_greet = std::move(s.to_greet);
-                        broadcasts = std::move(s.broadcasts);
-                      });
+                  wa.Wait([](State const& s) { return s.dying || !s.to_greet.empty() || !s.broadcasts.empty(); },
+                          [&](State& s) {
+                            dying = s.dying;
+                            conns = s.conns;
+                            to_greet = std::move(s.to_greet);
+                            broadcasts = std::move(s.broadcasts);
+                          });
                   if (dying) {
                     for (int id : conns) {
                       runtime(current::ToString(id) + "\ndying\n");
@@ -172,7 +169,7 @@ int main(int argc, char** argv) {
   routes += http.Register("/tasks", [](Request r) {
     std::ostringstream oss;
     int n = 0u;
-    LIFETIME_TRACKED_DEBUG_DUMP([&oss, &n](LifetimeTrackedInstance const& t) {
+    C5T_LIFETIME_MANAGER_TRACKED_DEBUG_DUMP([&oss, &n](LifetimeTrackedInstance const& t) {
       if (!n) {
         oss << "running tasks:\n";
       }
@@ -195,7 +192,7 @@ int main(int argc, char** argv) {
   std::cout << "terminating per user request" << std::endl;
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  LIFETIME_MANAGER_SET_LOGGER([](std::string const&) {});  // Disable logging for the exit sequence.
-  LIFETIME_MANAGER_EXIT(0);
+  C5T_LIFETIME_MANAGER_SET_LOGGER([](std::string const&) {});  // Disable logging for the exit sequence.
+  C5T_LIFETIME_MANAGER_EXIT(0);
   std::cerr << "should not see this!" << std::endl;
 }

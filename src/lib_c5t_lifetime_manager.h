@@ -66,29 +66,30 @@ class LifetimeManagerSingletonInterface {
 
 LifetimeManagerSingletonInterface& LifetimeManagerSingletonInstance();
 
-#define LIFETIME_MANAGER_SET_LOGGER(logger) LifetimeManagerSingletonInstance().SetLogger(logger)
+#define C5T_LIFETIME_MANAGER_SET_LOGGER(logger) LifetimeManagerSingletonInstance().SetLogger(logger)
 
 // O(1), just `.load()`-s the atomic.
-#define LIFETIME_SHUTTING_DOWN LifetimeManagerSingletonInstance().IsShuttingDown()
+#define C5T_LIFETIME_MANAGER_SHUTTING_DOWN LifetimeManagerSingletonInstance().IsShuttingDown()
 
 // Returns the `[[nodiscard]]`-ed scope for the lifetime of the passed-in lambda being registered.
 template <class F>
-[[nodiscard]] inline current::WaitableAtomicSubscriberScope LIFETIME_NOTIFY_OF_SHUTDOWN(F&& f) {
+[[nodiscard]] inline current::WaitableAtomicSubscriberScope C5T_LIFETIME_MANAGER_NOTIFY_OF_SHUTDOWN(F&& f) {
   return LifetimeManagerSingletonInstance().SubscribeToTerminationEvent(std::forward<F>(f));
 }
 
 // Waits forever. Useful for "singleton" threads and in `C5T_POPEN2()` runners for what should run forever.
-inline void LIFETIME_SLEEP_UNTIL_SHUTDOWN() { LifetimeManagerSingletonInstance().WaitUntilTimeToDie(); }
+inline void C5T_LIFETIME_MANAGER_SLEEP_UNTIL_SHUTDOWN() { LifetimeManagerSingletonInstance().WaitUntilTimeToDie(); }
 
 // Use in place of `std::this_thread::sleep_for(...)`. Also returns `false` if it's time to die.
 template <class DT>
-inline bool LIFETIME_SLEEP_FOR(DT&& dt) {
+inline bool C5T_LIFETIME_MANAGER_SLEEP_FOR(DT&& dt) {
   return LifetimeManagerSingletonInstance().WaitUntilTimeToDieFor(std::forward<DT>(dt));
 }
 
-#define LIFETIME_TRACKED_DEBUG_DUMP(...) LifetimeManagerSingletonInstance().DumpActive(__VA_ARGS__)
+#define C5T_LIFETIME_MANAGER_TRACKED_DEBUG_DUMP(...) LifetimeManagerSingletonInstance().DumpActive(__VA_ARGS__)
 
-inline void LIFETIME_MANAGER_EXIT(int code = 0, std::chrono::milliseconds graceful_delay = std::chrono::seconds(2)) {
+inline void C5T_LIFETIME_MANAGER_EXIT(int code = 0,
+                                      std::chrono::milliseconds graceful_delay = std::chrono::seconds(2)) {
   LifetimeManagerSingletonInstance().Exit(code, graceful_delay);
 }
 
@@ -119,7 +120,8 @@ T& CreateLifetimeTrackedInstance(char const* file, int line, std::string const& 
   return *result.GetValue();
 }
 
-#define LIFETIME_TRACKED_INSTANCE(type, ...) CreateLifetimeTrackedInstance<type>(__FILE__, __LINE__, __VA_ARGS__)
+#define C5T_LIFETIME_MANAGER_TRACKED_INSTANCE(type, ...) \
+  CreateLifetimeTrackedInstance<type>(__FILE__, __LINE__, __VA_ARGS__)
 
 // NOTE(dkorolev): Ensure that the thread body registers its lifetime to the singleton manager,
 //                 to eliminate the risk of this thread being `.join()`-ed before it is fully done.
@@ -127,7 +129,7 @@ T& CreateLifetimeTrackedInstance(char const* file, int line, std::string const& 
 // TODO(dkorolev): Why and how so though? I better investigate this deeper before using `std::move`-d lambda captures!
 
 template <typename F, class... ARGS>
-void LIFETIME_TRACKED_THREAD(std::string desc, F&& body, ARGS&&... args) {
+void C5T_LIFETIME_MANAGER_TRACKED_THREAD(std::string desc, F&& body, ARGS&&... args) {
   current::WaitableAtomic<bool> ready_to_go(false);
   LifetimeManagerSingletonInstance().EmplaceThreadImpl(std::thread(
       [moved_desc = std::move(desc), moved_body = std::forward<F>(body), &ready_to_go](ARGS&&... args) mutable {
@@ -141,7 +143,7 @@ void LIFETIME_TRACKED_THREAD(std::string desc, F&& body, ARGS&&... args) {
   ready_to_go.Wait();
 }
 
-// NOTE(dkorolev): `LIFETIME_TRACKED_POPEN2()` extends the "vanilla" `C5T_POPEN2()` in two ways.
+// NOTE(dkorolev): `LIFETIME_MANAGER_TRACKED_POPEN2()` extends the "vanilla" `C5T_POPEN2()` in two ways.
 //
 // 1) The user provides the "display name" for the inner graceful "task manager" to report what is running, and
 // 2) The lifetime managers takes the liberty to send SIGTERM to the child process once termination is initated.
@@ -154,7 +156,7 @@ void LIFETIME_TRACKED_THREAD(std::string desc, F&& body, ARGS&&... args) {
 //                 that the function is not compiled until used. This way, if `C5T/popen` is neither included
 //                 nor used, there are no build warnings/errors whatsoever.
 template <class T_POPEN2_RUNTIME>
-inline void LIFETIME_TRACKED_POPEN2_IMPL(
+inline void C5T_LIFETIME_MANAGER_TRACKED_POPEN2_IMPL(
     std::string const& text,
     char const* file,
     size_t line,
@@ -186,16 +188,16 @@ inline void LIFETIME_TRACKED_POPEN2_IMPL(
   mgr.TrackingRemove(id);
 }
 
-#define LIFETIME_TRACKED_POPEN2(text, ...) \
-  LIFETIME_TRACKED_POPEN2_IMPL<Popen2Runtime>(text, __FILE__, __LINE__, __VA_ARGS__)
+#define C5T_LIFETIME_MANAGER_TRACKED_POPEN2(text, ...) \
+  C5T_LIFETIME_MANAGER_TRACKED_POPEN2_IMPL<Popen2Runtime>(text, __FILE__, __LINE__, __VA_ARGS__)
 
 inline std::string ProvidedStringOrLifetimeManager(std::string s = "C5T_LIFETIME_MGR") { return s; }
 
-#define LIFETIME_MANAGER_USE_C5T_LOGGER(...)                                    \
-  do {                                                                          \
-    std::string const title = ProvidedStringOrLifetimeManager(__VA_ARGS__);     \
-    LIFETIME_MANAGER_SET_LOGGER([copy_of_title = title](std::string const& s) { \
-      std::cerr << copy_of_title << ": " << s << std::endl;                     \
-      C5T_LOGGER(copy_of_title) << s;                                           \
-    });                                                                         \
+#define C5T_LIFETIME_MANAGER_USE_C5T_LOGGER(...)                                    \
+  do {                                                                              \
+    std::string const title = ProvidedStringOrLifetimeManager(__VA_ARGS__);         \
+    C5T_LIFETIME_MANAGER_SET_LOGGER([copy_of_title = title](std::string const& s) { \
+      std::cerr << copy_of_title << ": " << s << std::endl;                         \
+      C5T_LOGGER(copy_of_title) << s;                                               \
+    });                                                                             \
   } while (false)

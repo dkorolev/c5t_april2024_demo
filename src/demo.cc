@@ -10,7 +10,7 @@ DEFINE_uint16(port, 5555, "");
 int main(int argc, char** argv) {
   ParseDFlags(&argc, &argv);
 
-  LIFETIME_MANAGER_SET_LOGGER([](std::string const& s) { std::cout << "C5T lifetime: " << s << std::endl; });
+  C5T_LIFETIME_MANAGER_SET_LOGGER([](std::string const& s) { std::cout << "C5T lifetime: " << s << std::endl; });
 
   // NOTE(dkorolev): Current's `HTTP()` server is not friendly with graceful termination, so use this workaround.
   current::WaitableAtomic<bool> time_to_stop_http_server_and_die(false);
@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
   });
 
   routes += http.Register("/seq", URLPathArgs::CountMask::None | URLPathArgs::CountMask::One, [](Request r) {
-    LIFETIME_TRACKED_THREAD(
+    C5T_LIFETIME_MANAGER_TRACKED_THREAD(
         "chunked response sender",
         [](Request r) {
           std::string N = "5";
@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
           }
           std::string cmd = "for i in $(seq " + N + "); do echo $i; sleep 0.05; done";
           auto rc = r.SendChunkedResponse();
-          LIFETIME_TRACKED_POPEN2(cmd, {"bash", "-c", cmd}, [&rc](std::string const& s) { rc(s + '\n'); });
+          C5T_LIFETIME_MANAGER_TRACKED_POPEN2(cmd, {"bash", "-c", cmd}, [&rc](std::string const& s) { rc(s + '\n'); });
         },
         std::move(r));
   });
@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
   routes += http.Register("/tasks", [](Request r) {
     std::ostringstream oss;
     int n = 0u;
-    LIFETIME_TRACKED_DEBUG_DUMP([&oss, &n](LifetimeTrackedInstance const& t) {
+    C5T_LIFETIME_MANAGER_TRACKED_DEBUG_DUMP([&oss, &n](LifetimeTrackedInstance const& t) {
       if (!n) {
         oss << "running tasks:\n";
       }
@@ -85,6 +85,6 @@ int main(int argc, char** argv) {
   time_to_stop_http_server_and_die.Wait();
   std::cout << "terminating per user request" << std::endl;
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  LIFETIME_MANAGER_EXIT(0);
+  C5T_LIFETIME_MANAGER_EXIT(0);
   std::cerr << "should not see this" << std::endl;
 }
