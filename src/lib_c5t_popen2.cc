@@ -81,7 +81,7 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
 #else
           // Since `::execvpe` is Linux-specific, here's a hacky way around it.
           *_NSGetEnviron() = envp;
-          int const r = ::execvp(path.c_str(), argv);
+          int const r = ::execvp(cmdline[0].c_str(), argv);
 #endif
           std::cerr << "FATAL: " << __LINE__ << " R=" << r << ", errno=" << errno << std::endl;
           ::perror("execvpe");
