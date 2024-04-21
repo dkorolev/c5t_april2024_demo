@@ -78,8 +78,8 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
         ::abort();
       });
     } else {
-      MutableCStyleVectorStringsArg(cmdline, [&](char* const argv[]) {
-        MutableCStyleVectorStringsArg(env, [&](char* const envp[]) {
+      MutableCStyleVectorStringsArg(cmdline, [&](char** argv) {
+        MutableCStyleVectorStringsArg(env, [&](char** envp) {
 #ifndef __APPLE__
           int const r = ::execvpe(cmdline[0].c_str(), argv, envp);
 #else
