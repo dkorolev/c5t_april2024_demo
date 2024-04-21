@@ -13,6 +13,10 @@
 #include <string>
 #include <thread>
 
+#if defined(__APPLE__)
+#include <crt_externs.h>
+#endif  // __APPLE__
+
 #include "bricks/strings/group_by_lines.h"
 
 template <typename F>
@@ -76,13 +80,13 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
     } else {
       MutableCStyleVectorStringsArg(cmdline, [&](char* const argv[]) {
         MutableCStyleVectorStringsArg(env, [&](char* const envp[]) {
-#if !defined(__APPLE__)
+#ifndef __APPLE__
           int const r = ::execvpe(cmdline[0].c_str(), argv, envp);
 #else
           // Since `::execvpe` is Linux-specific, here's a hacky way around it.
           *_NSGetEnviron() = envp;
           int const r = ::execvp(cmdline[0].c_str(), argv);
-#endif
+#endif  // __APPLE__
           std::cerr << "FATAL: " << __LINE__ << " R=" << r << ", errno=" << errno << std::endl;
           ::perror("execvpe");
           ::abort();
