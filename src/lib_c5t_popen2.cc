@@ -68,16 +68,24 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
 
     if (env.empty()) {
       MutableCStyleVectorStringsArg(cmdline, [&](char* const argv[]) {
-        int r = execvp(cmdline[0].c_str(), argv);
+        int const r = ::execvp(cmdline[0].c_str(), argv);
         std::cerr << "FATAL: " << __LINE__ << " R=" << r << ", errno=" << errno << std::endl;
-        perror("execvp");
+        ::perror("execvp");
+        ::abort();
       });
     } else {
       MutableCStyleVectorStringsArg(cmdline, [&](char* const argv[]) {
         MutableCStyleVectorStringsArg(env, [&](char* const envp[]) {
-          int r = execvpe(cmdline[0].c_str(), argv, envp);
+#if !defined(__APPLE__)
+          int const r = ::execvpe(cmdline[0].c_str(), argv, envp);
+#else
+          // Since `::execvpe` is Linux-specific, here's a hacky way around it.
+          *_NSGetEnviron() = envp;
+          int const r = ::execvp(path.c_str(), argv);
+#endif
           std::cerr << "FATAL: " << __LINE__ << " R=" << r << ", errno=" << errno << std::endl;
-          perror("execvpe");
+          ::perror("execvpe");
+          ::abort();
         });
       });
     }
