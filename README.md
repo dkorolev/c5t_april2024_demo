@@ -1,4 +1,4 @@
-[![C++](https://img.shields.io/badge/c%2B%2B-17-informational.svg)](https://en.cppreference.com/w/cpp/17) [![./run.sh](https://github.com/dkorolev/c5t_april2024_demo/actions/workflows/run.yml/badge.svg)](https://github.com/dkorolev/c5t_april2024_demo/actions/workflows/run.yml)
+[![C++](https://img.shields.io/badge/c%2B%2B-17-informational.svg)](https://en.cppreference.com/w/cpp/17) [![tests](https://github.com/dkorolev/c5t_april2024_demo/actions/workflows/test.yml/badge.svg)](https://github.com/dkorolev/c5t_april2024_demo/actions/workflows/test.yml) [![./run.sh](https://github.com/dkorolev/c5t_april2024_demo/actions/workflows/run.yml/badge.svg)](https://github.com/dkorolev/c5t_april2024_demo/actions/workflows/run.yml)
 
 # `c5t_april2024_demo`
 
