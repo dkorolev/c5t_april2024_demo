@@ -2,6 +2,7 @@
 
 set -e
 
+echo -e '#include <string>\nextern "C" std::string foo() { return "original"; }' >src/dlib_ext_gitignored.cc
 make
 
 echo
@@ -48,6 +49,8 @@ echo
 assert_get_eq "/seq/1" "1"
 
 assert_get_eq "/dlib" "no dlibs loaded"
+assert_get_eq "/dlib_reload/foo" "loaded"
+assert_get_eq "/dlib_reload/foo" "up to date"
 assert_get_eq "/dlib/foo" "has foo(): foo, i=1"
 assert_get_eq "/dlib" "foo"
 assert_get_eq "/dlib/foo" "has foo(): foo, i=2"
@@ -58,6 +61,19 @@ assert_get_eq "/dlib" "boo,foo"
 
 assert_get_eq "/dlib/na" "no such dlib"
 assert_get_eq "/dlib" "boo,foo"
+
+assert_get_eq "/dlib/gitignored" "has foo(): original"
+assert_get_eq "/dlib_reload/gitignored" "up to date"
+echo -e '#include <string>\nextern "C" std::string foo() { return "injected"; }' >src/dlib_ext_gitignored.cc
+assert_get_eq "/dlib_reload/gitignored" "up to date"
+make
+assert_get_eq "/dlib_reload/gitignored" "reloaded"
+assert_get_eq "/dlib_reload/gitignored" "up to date"
+assert_get_eq "/dlib/gitignored" "has foo(): injected"
+
+echo -e '#include <string>\nextern "C" std::string foo() { return "re-injected"; }' >src/dlib_ext_gitignored.cc
+make
+assert_get_eq "/dlib/gitignored" "has foo(): re-injected"
 
 get "/seq/100" >/dev/null &
 PID=$1

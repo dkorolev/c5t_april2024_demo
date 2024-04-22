@@ -139,6 +139,20 @@ int main(int argc, char** argv) {
         [&r]() { r("no such dlib\n"); });
   });
 
+  routes += http.Register("/dlib_reload", URLPathArgs::CountMask::One, [](Request r) {
+    std::string const name = r.url_path_args[0];
+    auto const res = C5T_DLIB_RELOAD(name).res;
+    if (res == C5T_DLIB_RELOAD_STATUS::UpToDate) {
+      r("up to date\n");
+    } else if (res == C5T_DLIB_RELOAD_STATUS::Loaded) {
+      r("loaded\n");
+    } else if (res == C5T_DLIB_RELOAD_STATUS::Reloaded) {
+      r("reloaded\n");
+    } else {
+      r("failed\n");
+    }
+  });
+
   time_to_stop_http_server_and_die.Wait();
   std::cout << "terminating per user request" << std::endl;
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
