@@ -1,11 +1,13 @@
 #include "lib_c5t_dlib.h"
 
+#include <iostream>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <sstream>
+#include <sys/stat.h>  // NOTE(dkorolev): This may require fixes for macOS.
 #include <tuple>
 #include <utility>
-#include <sys/stat.h>  // NOTE(dkorolev): This may require fixes for macOS.
 
 #include "bricks/util/singleton.h"
 
@@ -26,7 +28,20 @@ struct C5T_DLib_Impl final : C5T_DLib {
   std::map<std::string, std::pair<void*, bool>> symbols;  // name -> { ptr, bool not_present }.
 
   C5T_DLib_Impl(std::string const& base_dir, std::string const& basename)
-      : dl(current::bricks::system::DynamicLibrary::CrossPlatform(base_dir + "/libdlib_ext_" + basename)) {}
+      : dl(current::bricks::system::DynamicLibrary::CrossPlatform(base_dir + "/libdlib_ext_" + basename)) {
+    // The on-load sequence.
+    auto const pOnLoad = Get<void()>("OnLoad");
+    if (pOnLoad) {
+      (*pOnLoad)();
+    }
+  }
+  ~C5T_DLib_Impl() {
+    // The on-unload sequence.
+    auto const pOnUnload = Get<void()>("OnUnload");
+    if (pOnUnload) {
+      (*pOnUnload)();
+    }
+  }
 
   void* GetRawPF(std::string const& name) override {
     std::lock_guard lock(mutex);
@@ -57,7 +72,8 @@ inline decltype(auto) StructStatIntoKey(struct stat const& data) {
   return std::make_tuple(data.st_ino, data.st_mtim.tv_sec, data.st_mtim.tv_nsec);
 }
 
-struct C5T_DLibs_Manager final {
+class C5T_DLibs_Manager final : public C5T_DLibs_Manager_Interface {
+ public:
   using libkey_t = decltype(StructStatIntoKey(std::declval<struct stat const&>()));
 
   std::string base_dir = ".";
@@ -85,9 +101,9 @@ struct C5T_DLibs_Manager final {
     return oss.str();
   }
 
-  void SetBaseDir(std::string s) { base_dir = std::move(s); }
+  void SetBaseDir(std::string s) override { base_dir = std::move(s); }
 
-  C5T_DLIB_RELOAD_RESULT LoadLibAndReloadAsNeededFromLockedSection(std::string const& name) {
+  C5T_DLIB_RELOAD_RESULT LoadLibAndReloadAsNeededFromLockedSection(std::string const& name) override {
     // NOTE(dkorolev): May well do some work outside the locked section, such as `::stat`. Later.
     try {
       // NOTE(dkorolev): This should be part of `C5T/current/bricks/system/syscalls.h`, in one place.
@@ -124,7 +140,9 @@ struct C5T_DLibs_Manager final {
     }
   }
 
-  bool UseDLib(std::string const& name, std::function<void(C5T_DLib&)> cb_success, std::function<void()> cb_fail) {
+  bool UseDLib(std::string const& name,
+               std::function<void(C5T_DLib&)> cb_success,
+               std::function<void()> cb_fail) override {
     std::lock_guard lock(mutex);
     auto const r = LoadLibAndReloadAsNeededFromLockedSection(name);
     if (r.ptr) {
@@ -136,12 +154,12 @@ struct C5T_DLibs_Manager final {
     }
   }
 
-  C5T_DLIB_RELOAD_RESULT DoLoadOrReloadDLib(std::string const& name) {
+  C5T_DLIB_RELOAD_RESULT DoLoadOrReloadDLib(std::string const& name) override {
     std::lock_guard lock(mutex);
     return LoadLibAndReloadAsNeededFromLockedSection(name);
   }
 
-  void ListDLibs(std::function<void(std::string)> f) {
+  void ListDLibs(std::function<void(std::string)> f) override {
     std::lock_guard lock(mutex);
     for (auto const& [k, _] : loaded_libs) {
       f(k);
@@ -149,20 +167,41 @@ struct C5T_DLibs_Manager final {
   }
 };
 
-void C5T_DLIB_SET_BASE_DIR(std::string base_dir) {
-  current::Singleton<C5T_DLibs_Manager>().SetBaseDir(std::move(base_dir));
+struct C5T_DLibs_ManagerContainer final {
+  C5T_DLibs_Manager_Interface* pimpl = nullptr;
+};
+
+inline C5T_DLibs_Manager_Interface& C5T_DLibs_Manager_Instance() {
+  auto& singleton = current::Singleton<C5T_DLibs_ManagerContainer>();
+  if (!singleton.pimpl) {
+    std::cerr << "The `C5T_DLIB_*` subsystem was not initialized, use `C5T_DLIB_SET_BASE_DIR`." << std::endl;
+    ::abort();
+  }
+  return *singleton.pimpl;
 }
 
-void C5T_DLIB_LIST(std::function<void(std::string)> f) {
-  current::Singleton<C5T_DLibs_Manager>().ListDLibs(std::move(f));
+void C5T_DLIB_USE_PROVIDED_INSTANCE_AND_SET_BASE_DIR(C5T_DLibs_Manager_Interface& instance, std::string base_dir) {
+  auto& singleton = current::Singleton<C5T_DLibs_ManagerContainer>();
+  instance.SetBaseDir(std::move(base_dir));
+  singleton.pimpl = &instance;
 }
+
+void C5T_DLIB_SET_BASE_DIR(std::string base_dir) {
+  C5T_DLIB_USE_PROVIDED_INSTANCE_AND_SET_BASE_DIR(current::Singleton<C5T_DLibs_Manager>(), std::move(base_dir));
+}
+
+std::unique_ptr<C5T_DLibs_Manager_Interface> INTERNAL_C5T_DLIB_CREATE_SCOPED_INSTANCE() {
+  return std::make_unique<C5T_DLibs_Manager>();
+}
+
+void C5T_DLIB_LIST(std::function<void(std::string)> f) { C5T_DLibs_Manager_Instance().ListDLibs(std::move(f)); }
 
 bool C5T_DLIB_USE(std::string const& lib_name,
                   std::function<void(C5T_DLib&)> cb_success,
                   std::function<void()> cb_fail) {
-  return current::Singleton<C5T_DLibs_Manager>().UseDLib(lib_name, std::move(cb_success), std::move(cb_fail));
+  return C5T_DLibs_Manager_Instance().UseDLib(lib_name, std::move(cb_success), std::move(cb_fail));
 }
 
 C5T_DLIB_RELOAD_RESULT C5T_DLIB_RELOAD(std::string const& lib_name) {
-  return current::Singleton<C5T_DLibs_Manager>().DoLoadOrReloadDLib(lib_name);
+  return C5T_DLibs_Manager_Instance().DoLoadOrReloadDLib(lib_name);
 }
