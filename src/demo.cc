@@ -5,6 +5,7 @@
 #include "lib_c5t_popen2.h"  // IWYU pragma: keep
 #include "lib_c5t_lifetime_manager.h"
 #include "lib_c5t_logger.h"
+#include "lib_c5t_dlib.h"
 
 DEFINE_uint16(port, 5555, "");
 
@@ -19,6 +20,7 @@ int main(int argc, char** argv) {
     return argv0[0] == current::FileSystem::GetPathSeparator() ? "/" + res : res;
   }();
 
+  C5T_DLIB_SET_BASE_DIR(bin_path);
   C5T_LOGGER_SET_LOGS_DIR(bin_path);
 
   C5T_LOGGER("demo") << "demo started";
@@ -106,6 +108,35 @@ int main(int argc, char** argv) {
     std::string const s = oss.str();
     C5T_LOGGER("life") << s;
     r(s);
+  });
+
+  routes += http.Register("/dlib", [](Request r) {
+    std::ostringstream oss;
+    int n = 0u;
+    C5T_DLIB_LIST([&oss, &n](std::string const& s) {
+      oss << ',' << s;
+      ++n;
+    });
+    if (!n) {
+      r("no dlibs loaded\n");
+    } else {
+      r(oss.str().substr(1));
+    }
+  });
+
+  routes += http.Register("/dlib", URLPathArgs::CountMask::One, [](Request r) {
+    std::string const name = r.url_path_args[0];
+    C5T_DLIB_USE(
+        name,
+        [&r](C5T_DLib& dlib) {
+          auto const p = dlib.template Get<std::string()>("foo");
+          if (p) {
+            r("has foo(): " + (*p)() + '\n');
+          } else {
+            r("no foo()\n");
+          }
+        },
+        [&r]() { r("no such dlib\n"); });
   });
 
   time_to_stop_http_server_and_die.Wait();
