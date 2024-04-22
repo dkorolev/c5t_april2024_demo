@@ -143,7 +143,7 @@ void C5T_LIFETIME_MANAGER_TRACKED_THREAD(std::string desc, F&& body, ARGS&&... a
   ready_to_go.Wait();
 }
 
-// NOTE(dkorolev): `LIFETIME_MANAGER_TRACKED_POPEN2()` extends the "vanilla" `C5T_POPEN2()` in two ways.
+// NOTE(dkorolev): `C5T_LIFETIME_MANAGER_TRACKED_POPEN2()` extends the "vanilla" `C5T_POPEN2()` in two ways.
 //
 // 1) The user provides the "display name" for the inner graceful "task manager" to report what is running, and
 // 2) The lifetime managers takes the liberty to send SIGTERM to the child process once termination is initated.

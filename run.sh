@@ -43,7 +43,9 @@ function assert_get_eq {
 }
 
 get "/up"
+echo
 
+get "/seq/1"
 echo
 
 assert_get_eq "/seq/1" "1"
@@ -62,16 +64,33 @@ assert_get_eq "/dlib" "boo,foo"
 assert_get_eq "/dlib/na" "no such dlib"
 assert_get_eq "/dlib" "boo,foo"
 
+get "/dlib/foo"
+get "/dlib/boo"
+get "/dlib/na"
+echo
+
 assert_get_eq "/dlib/gitignored" "has foo(): original"
 assert_get_eq "/dlib_reload/gitignored" "up to date"
-echo -e '#include <string>\nextern "C" std::string foo() { return "injected"; }' >src/dlib_ext_gitignored.cc
+cat >src/dlib_ext_gitignored.cc <<EOF
+#include <iostream>
+#include <string>
+extern "C" std::string foo() { return "injected"; }
+extern "C" void OnLoad() { std::cout << "injected::OnLoad()" << std::endl; }
+extern "C" void OnUnload() { std::cout << "injected::OnUnload()" << std::endl; }
+EOF
 assert_get_eq "/dlib_reload/gitignored" "up to date"
 make
 assert_get_eq "/dlib_reload/gitignored" "reloaded"
 assert_get_eq "/dlib_reload/gitignored" "up to date"
 assert_get_eq "/dlib/gitignored" "has foo(): injected"
 
-echo -e '#include <string>\nextern "C" std::string foo() { return "re-injected"; }' >src/dlib_ext_gitignored.cc
+cat >src/dlib_ext_gitignored.cc <<EOF
+#include <iostream>
+#include <string>
+extern "C" std::string foo() { return "re-injected"; }
+extern "C" void OnLoad() { std::cout << "re_injected::OnLoad()" << std::endl; }
+extern "C" void OnUnload() { std::cout << "re_injected::OnUnload()" << std::endl; }
+EOF
 make
 assert_get_eq "/dlib/gitignored" "has foo(): re-injected"
 
