@@ -1,5 +1,7 @@
 #pragma once
 
+// TODO(dkorolev): All these are next steps.
+//
 // The wrapper over native Current's `dlib` support. Extensions:
 // 1) Handles startup and tear down, both stateful and stateless. Namely, will call, if present:
 //    - `OnC5TLoad()`.
@@ -55,6 +57,16 @@ void C5T_DLIB_SET_BASE_DIR(std::string base_dir);
 // List the currently loaded `DLIB`-s, for debugging purposes.
 void C5T_DLIB_LIST(std::function<void(std::string)>);
 
-// Use the `DLIB`, load it if needed.
-void C5T_DLIB_USE(
-    std::string const& name, std::function<void(C5T_DLib&)>, std::function<void()> = [] {});
+// Use the `DLIB`, load it if needed, re-load it if needed.
+// TODO(dkorolev): DLib lifetime management, this is the next step.
+bool C5T_DLIB_USE(
+    std::string const& lib_name, std::function<void(C5T_DLib&)>, std::function<void()> = [] {});
+
+// Reloads the lib as needed, with the "symlink trick" so that the library is truly re-loaded.
+enum class C5T_DLIB_RELOAD_STATUS : int { InternalError, Fail, Loaded, UpToDate, Reloaded };
+struct C5T_DLIB_RELOAD_RESULT final {
+  C5T_DLIB_RELOAD_STATUS res = C5T_DLIB_RELOAD_STATUS::InternalError;
+  C5T_DLib* ptr = nullptr;
+};
+
+C5T_DLIB_RELOAD_RESULT C5T_DLIB_RELOAD(std::string const& lib_name);

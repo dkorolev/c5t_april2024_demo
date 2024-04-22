@@ -1,6 +1,9 @@
 # The `Makefile` grabs the latest `CMakeLists.txt`.
 CMakeLists.txt
 
+# This file is over-written and re-built several times during the `./run.sh` demo-test.
+src/dlib_ext_gitignored.cc
+
 .current/
 .current_debug/
 
