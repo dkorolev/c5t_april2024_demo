@@ -51,6 +51,7 @@ struct C5T_LOGGER_Impl_Stdout final {};
 
 struct C5T_LOGGER_Impl final : C5T_LOGGER_Interface {
   Optional<std::string> const log_file_name_;
+  Optional<std::string> const log_name_;
 
   struct InnerLoggerImpl final {
     // Keeps { log file name, fstream }, to re-create with one-liners.
@@ -79,8 +80,10 @@ struct C5T_LOGGER_Impl final : C5T_LOGGER_Interface {
   current::WaitableAtomic<InnerLoggerImpl> inner_logger_;
 
   C5T_LOGGER_Impl() = delete;
-  C5T_LOGGER_Impl(std::string log_file_name)
-      : log_file_name_(std::move(log_file_name)), inner_logger_(InnerLoggerImpl::Construct(), Value(log_file_name_)) {}
+  C5T_LOGGER_Impl(std::string const& base_path, std::string log_name)
+      : log_file_name_(current::FileSystem::JoinPath(base_path, log_name)),
+        log_name_(std::move(log_name)),
+        inner_logger_(InnerLoggerImpl::Construct(), Value(log_file_name_)) {}
   C5T_LOGGER_Impl(C5T_LOGGER_Impl_Stdout) : inner_logger_(InnerLoggerImpl::ConstructForStdout()) {}
 
   C5T_LOGGER_LogLineWriter NewLineWriter() override {
@@ -115,6 +118,12 @@ struct C5T_LOGGER_Impl final : C5T_LOGGER_Interface {
             std::make_unique<InnerLoggerImpl::active_t>(fn, std::ofstream(fn, std::fstream::app | std::fstream::ate));
         if (!renamed_file_name.empty()) {
           LOG_IMPL("the old log file was renamed to " << renamed_file_name);
+        }
+        if (log_starting_new && Exists(log_name_)) {
+          auto const dst = Value(log_name_) + ts + ".txt";
+          auto const src = log_file_name + ".txt";
+          static_cast<void>(::unlink(src.c_str()));
+          static_cast<void>(::symlink(dst.c_str(), src.c_str()));
         }
       }
       if (log_starting_new) {
@@ -206,8 +215,7 @@ struct C5T_LOGGER_SINGLETON_Impl final : C5T_LOGGER_SINGLETON_Interface {
       auto& placeholder = inner.per_file_loggers[log_file_name];
       if (!placeholder) {
         if (Exists(inner.base_path)) {
-          placeholder =
-              std::make_unique<C5T_LOGGER_Impl>(current::FileSystem::JoinPath(Value(inner.base_path), log_file_name));
+          placeholder = std::make_unique<C5T_LOGGER_Impl>(Value(inner.base_path), log_file_name);
         } else {
           // TODO(dkorolev): Two IMPLs, one for file one for no file.
           placeholder = std::make_unique<C5T_LOGGER_Impl>(C5T_LOGGER_Impl_Stdout());

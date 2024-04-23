@@ -4,9 +4,12 @@
 #include "bricks/strings/join.h"
 #include "bricks/strings/split.h"
 #include "bricks/sync/waitable_atomic.h"
-#include "lib_c5t_lifetime_manager.h"
-#include "lib_c5t_popen2.h"  // IWYU pragma: keep
+#include "dlib_ext_msgreplier.h"
 #include "lib_build_info.h"
+#include "lib_c5t_dlib.h"
+#include "lib_c5t_lifetime_manager.h"
+#include "lib_c5t_logger.h"
+#include "lib_c5t_popen2.h"  // IWYU pragma: keep
 
 inline std::string BasePathOf(std::string const& s) {
   std::vector<std::string> parts = current::strings::Split(s, current::FileSystem::GetPathSeparator());
@@ -24,6 +27,17 @@ DEFINE_string(html_src, BasePathOf(__FILE__) + "/" + kHtmlSourceFile, "");
 
 int main(int argc, char** argv) {
   ParseDFlags(&argc, &argv);
+
+  std::string const bin_path = []() {
+    std::string const argv0 = current::Singleton<dflags::Argv0Container>().argv_0;
+    std::vector<std::string> argv0_path = current::strings::Split(argv0, current::FileSystem::GetPathSeparator());
+    argv0_path.pop_back();
+    std::string const res = current::strings::Join(argv0_path, current::FileSystem::GetPathSeparator());
+    return argv0[0] == current::FileSystem::GetPathSeparator() ? "/" + res : res;
+  }();
+
+  C5T_DLIB_SET_BASE_DIR(bin_path);
+  C5T_LOGGER_SET_LOGS_DIR(bin_path);
 
   try {
     if (current::FileSystem::GetFileSize(FLAGS_python_src) == 0u) {
@@ -83,6 +97,35 @@ int main(int argc, char** argv) {
     time_to_stop_http_server_and_die.SetValue(true);
   });
 
+  routes += http.Register("/dlib", [](Request r) {
+    std::ostringstream oss;
+    int n = 0u;
+    C5T_DLIB_LIST([&oss, &n](std::string const& s) {
+      oss << ',' << s;
+      ++n;
+    });
+    if (!n) {
+      r("no dlibs loaded\n");
+    } else {
+      r(oss.str().substr(1));
+    }
+  });
+
+  routes += http.Register("/dlib", URLPathArgs::CountMask::One, [](Request r) {
+    std::string const name = r.url_path_args[0];
+    C5T_DLIB_USE(
+        name,
+        [&r](C5T_DLib& dlib) {
+          auto const s = dlib.Call<std::string()>("foo");
+          if (Exists(s)) {
+            r("has foo(): " + Value(s) + '\n');
+          } else {
+            r("no foo()\n");
+          }
+        },
+        [&r]() { r("no such dlib\n"); });
+  });
+
   C5T_LIFETIME_MANAGER_TRACKED_THREAD(
       "thread for wss.py", ([&]() {
         struct State final {
@@ -92,6 +135,16 @@ int main(int argc, char** argv) {
           std::vector<std::pair<int, std::string>> broadcasts;
         };
         current::WaitableAtomic<State> wa;
+        struct MsgReplier : IMsgReplier, ILogger {
+          current::WaitableAtomic<State>& wa;
+          char const* pmsg = nullptr;
+          MsgReplier(current::WaitableAtomic<State>& wa) : ILogger(C5T_LOGGER()), wa(wa) {}
+          char const* CurrentMessage() override { return pmsg; }
+          void ReplyToAll(std::string const& msg) override {
+            wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(0, msg); });
+          }
+        };
+        MsgReplier impl_msgreplier(wa);
         bool done = false;
         std::thread t([&]() {
           time_to_stop_http_server_and_die.Wait();
@@ -120,7 +173,16 @@ int main(int argc, char** argv) {
                   int id;
                   s += sscanf(s, "%d", &id);
                   ++s;
-                  wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(id, s); });
+                  if (std::string("stop") == s) {
+                    wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(0, "stopping"); });
+                    time_to_stop_http_server_and_die.SetValue(true);
+                  } else {
+                    wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(id, s); });
+                    impl_msgreplier.pmsg = s;
+                    C5T_DLIB_USE("msgreplier", [&impl_msgreplier](C5T_DLib& dlib) {
+                      dlib.Call<void(IDLib&)>("OnBroadcast", impl_msgreplier);
+                    });
+                  }
                 }
               },
               [&](Popen2Runtime& runtime) {
@@ -145,7 +207,8 @@ int main(int argc, char** argv) {
                     break;
                   }
                   for (int id : to_greet) {
-                    runtime(current::ToString(id) + "\noh hi, from " + GitCommit() + '\n');
+                    runtime(current::ToString(id) + "\n# server " + GitCommit().substr(0u, 7u) + '\n');
+                    runtime(current::ToString(id) + "\n# you are client index " + current::ToString(id) + '\n');
                   }
 
                   for (auto const& e : broadcasts) {

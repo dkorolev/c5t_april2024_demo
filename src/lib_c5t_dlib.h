@@ -9,38 +9,115 @@
 //    - ...
 // 2) Renames and does the symlinks magic as the `.so` file changes on disk and is requested to be reloaded.
 //    The issue is that by default the environment, at least on Linux, will not even attempt to re-load the same lib.
-// 3) Offers the generic `IGeneric` and `IGeneric::Use<T>()` means to call other stuff.
+// 3) Exposes the generic `.Call()` inteface, as well as the `CallOrDefault()` one.
+//    TODO(dkorolev): Make them cleaner and document them better.
+// 4) Offers the generic `IGeneric` and `IGeneric::Use<T>()` means to call other stuff.
 //    The code defined in the `dlib_*` can receive implementations of many interfaces at once.
 //    At the very least, the logger and the lifetime managers come in handy.
 //
 // Usage:
-// 1) Create an interface provider as `class MyInterface : public virtual IGeneric`.
-// 2) Have the `dlib`-exposed function be some `extern "C" void MyDLibExternalFunction(IGeneric& dlib);`
-// 3) In that function, `dlib.Use<MyInterface>(...)`, see the `demo_*` in (some) C5T repo for details.
-// 4) Call it with an instance of your `MyInterface`, see the `demo_*` in (some) C5T repo for details.
+// 1) Create an interface provider as `struct IMyInterface : virtual IDlib`.
+// 2) Have the `dlib`-exposed function be some `extern "C" void MyDLibExternalFunction(IDLib& dlib);`
+// 3) In that function, `dlib.Use<void(IMyInterface&)>(...)`, see the `demo_*` in (some) C5T repo for details.
+// 4) Call it with an instance of your `IMyInterface`, see the `demo_*` in (some) C5T repo for details.
 
 #include <functional>
 #include <memory>
 #include <string>
+#include <type_traits>
+
+#include "typesystem/optional.h"
+#include "typesystem/helpers.h"  // IWYU pragma: keep
 
 // The thinnest possible wrapper over a loaded `dlib`.
-struct C5T_DLib {
-  virtual ~C5T_DLib() = default;
+class C5T_DLib {
+ protected:
   virtual void* GetRawPF(std::string const& fn_name) = 0;
-  template <typename F_PTR>
-  F_PTR* Get(std::string const& fn_name) {
-    return reinterpret_cast<F_PTR*>(GetRawPF(fn_name));
+
+ public:
+  virtual ~C5T_DLib() = default;
+
+  bool Has(std::string const& fn_name) { return GetRawPF(fn_name) != nullptr; }
+
+  template <typename F,
+            typename... ARGS,
+            typename T_RETVAL = std::invoke_result_t<F, ARGS...>,
+            class = typename std::enable_if<!std::is_same_v<T_RETVAL, void>>::type>
+  T_RETVAL CallOrDefault(std::string const& fn_name, ARGS&&... args) {
+    auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
+    if (pf) {
+      return (*pf)(std::forward<ARGS>(args)...);
+    } else {
+      return T_RETVAL();
+    }
+  }
+
+  template <typename F,
+            typename... ARGS,
+            typename T_RETVAL = std::invoke_result_t<F, ARGS...>,
+            class = typename std::enable_if<std::is_same_v<T_RETVAL, void>>::type>
+  void CallOrDefault(std::string const& fn_name, ARGS&&... args) {
+    auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
+    if (pf) {
+      (*pf)(std::forward<ARGS>(args)...);
+    }
+  }
+
+  template <typename F,
+            typename... ARGS,
+            typename T_RETVAL = std::invoke_result_t<F, ARGS...>,
+            class = typename std::enable_if<!std::is_same_v<T_RETVAL, void>>::type>
+  Optional<T_RETVAL> Call(std::string const& fn_name, ARGS&&... args) {
+    auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
+    if (pf) {
+      return (*pf)(std::forward<ARGS>(args)...);
+    } else {
+      return nullptr;
+    }
+  }
+
+  template <typename F,
+            typename... ARGS,
+            typename T_RETVAL = std::invoke_result_t<F, ARGS...>,
+            class = typename std::enable_if<std::is_same_v<T_RETVAL, void>>::type>
+  void Call(std::string const& fn_name, ARGS&&... args) {
+    auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
+    if (pf) {
+      (*pf)(std::forward<ARGS>(args)...);
+    }
   }
 };
 
 // The "meta-interface" to pass interfaces (impl object instances by references) to and from dlib-s.
-struct IGeneric {
+struct IDLib {
  protected:
-  virtual ~IGeneric() = default;
+  virtual ~IDLib() = default;
 
  public:
+  template <
+      class I,
+      class F,
+      class = typename std::enable_if<std::is_same_v<decltype(std::declval<F>()(*std::declval<I*>())), void>>::type>
+  void Use(F&& f) {
+    if (I* i = dynamic_cast<I*>(this)) {
+      f(*i);
+    }
+  }
+
+  template <
+      class I,
+      class F,
+      class = typename std::enable_if<!std::is_same_v<decltype(std::declval<F>()(*std::declval<I*>())), void>>::type>
+  Optional<decltype(std::declval<F>()(*std::declval<I*>()))> Use(F&& f) {
+    if (I* i = dynamic_cast<I*>(this)) {
+      return f(*i);
+    } else {
+      return nullptr;
+    }
+  }
+
   template <class I, class F, class G = std::function<decltype(std::declval<F>()(*std::declval<I*>()))()>>
-  decltype(std::declval<F>()(*std::declval<I*>())) Use(
+  decltype(std::declval<F>()(*std::declval<I*>())) UseOrDefault(
       F&& f, G&& g = []() -> decltype(std::declval<F>()(*std::declval<I*>())) {
         return decltype(std::declval<F>()(std::declval<I&>()))();
       }) {
@@ -50,6 +127,26 @@ struct IGeneric {
       return g();
     }
   }
+};
+
+// Forward-declared `dlib` interface for `C5T_LOGGER`.
+namespace current::logger {
+class C5T_LOGGER_SINGLETON_Interface;
+}  // namespace current::logger
+
+class ILogger : public virtual IDLib {
+ private:
+  current::logger::C5T_LOGGER_SINGLETON_Interface& logger_;
+  ILogger() = delete;
+
+ public:
+  // Construct and pass as: `: ILogger(C5T_LOGGER())`.
+  // Full form: `struct MyInterface : ILogger, ... { MyInterface(...) : ILogger(C5T_LOGGER()), ...`.
+  ILogger(current::logger::C5T_LOGGER_SINGLETON_Interface& logger) : logger_(logger) {}
+
+  // Enable with: `C5T_LOGGER_USE(ilogger)`.
+  // Full form: `iface.Use<ILogger>([](ILogger& logger) { C5T_LOGGER_USE(logger); });`.
+  current::logger::C5T_LOGGER_SINGLETON_Interface& Logger() { return logger_; }
 };
 
 // The public interface, to enable `C5T_LIFETIME_MANAGER`-level injection.

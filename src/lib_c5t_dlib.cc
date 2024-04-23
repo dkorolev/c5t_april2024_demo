@@ -21,28 +21,14 @@ constexpr static char const* const kPlatformSpecificDotSO =
 #endif
     ;
 
-struct C5T_DLib_Impl final : C5T_DLib {
-  current::bricks::system::DynamicLibrary dl;
+class C5T_DLib_Impl final : public C5T_DLib {
+ private:
+  current::bricks::system::DynamicLibrary dl_;
 
   std::mutex mutex;
   std::map<std::string, std::pair<void*, bool>> symbols;  // name -> { ptr, bool not_present }.
 
-  C5T_DLib_Impl(std::string const& base_dir, std::string const& basename)
-      : dl(current::bricks::system::DynamicLibrary::CrossPlatform(base_dir + "/libdlib_ext_" + basename)) {
-    // The on-load sequence.
-    auto const pOnLoad = Get<void()>("OnLoad");
-    if (pOnLoad) {
-      (*pOnLoad)();
-    }
-  }
-  ~C5T_DLib_Impl() {
-    // The on-unload sequence.
-    auto const pOnUnload = Get<void()>("OnUnload");
-    if (pOnUnload) {
-      (*pOnUnload)();
-    }
-  }
-
+ protected:
   void* GetRawPF(std::string const& name) override {
     std::lock_guard lock(mutex);
     auto& p = symbols[name];
@@ -52,7 +38,7 @@ struct C5T_DLib_Impl final : C5T_DLib {
       return nullptr;
     } else {
       try {
-        void* r = dl.template Get<void*>(name);
+        void* r = dl_.template Get<void*>(name);
         if (r) {
           p.first = r;
           return r;
@@ -65,6 +51,17 @@ struct C5T_DLib_Impl final : C5T_DLib {
         return nullptr;
       }
     }
+  }
+
+ public:
+  C5T_DLib_Impl(std::string const& base_dir, std::string const& basename)
+      : dl_(current::bricks::system::DynamicLibrary::CrossPlatform(base_dir + "/libdlib_ext_" + basename)) {
+    // The on-load sequence.
+    CallOrDefault<void()>("OnLoad");
+  }
+  ~C5T_DLib_Impl() {
+    // The on-unload sequence.
+    CallOrDefault<void()>("OnUnload");
   }
 };
 
@@ -145,6 +142,7 @@ class C5T_DLibs_Manager final : public C5T_DLibs_Manager_Interface {
                std::function<void()> cb_fail) override {
     std::lock_guard lock(mutex);
     auto const r = LoadLibAndReloadAsNeededFromLockedSection(name);
+    // TODO(dkorolev): Change the lock to the per-lib one here, release the lock for all the libs!
     if (r.ptr) {
       cb_success(*r.ptr);
       return true;
