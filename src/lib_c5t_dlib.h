@@ -37,7 +37,10 @@ class C5T_DLib {
 
   bool Has(std::string const& fn_name) { return GetRawPF(fn_name) != nullptr; }
 
-  template <typename F, typename... ARGS, typename T_RETVAL = std::invoke_result_t<F, ARGS...>>
+  template <typename F,
+            typename... ARGS,
+            typename T_RETVAL = std::invoke_result_t<F, ARGS...>,
+            class = typename std::enable_if<!std::is_same_v<T_RETVAL, void>>::type>
   T_RETVAL CallOrDefault(std::string const& fn_name, ARGS&&... args) {
     auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
     if (pf) {
@@ -47,7 +50,21 @@ class C5T_DLib {
     }
   }
 
-  template <typename F, typename... ARGS, typename T_RETVAL = std::invoke_result_t<F, ARGS...>>
+  template <typename F,
+            typename... ARGS,
+            typename T_RETVAL = std::invoke_result_t<F, ARGS...>,
+            class = typename std::enable_if<std::is_same_v<T_RETVAL, void>>::type>
+  void CallOrDefault(std::string const& fn_name, ARGS&&... args) {
+    auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
+    if (pf) {
+      (*pf)(std::forward<ARGS>(args)...);
+    }
+  }
+
+  template <typename F,
+            typename... ARGS,
+            typename T_RETVAL = std::invoke_result_t<F, ARGS...>,
+            class = typename std::enable_if<!std::is_same_v<T_RETVAL, void>>::type>
   Optional<T_RETVAL> Call(std::string const& fn_name, ARGS&&... args) {
     auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
     if (pf) {
@@ -56,16 +73,49 @@ class C5T_DLib {
       return nullptr;
     }
   }
+
+  template <typename F,
+            typename... ARGS,
+            typename T_RETVAL = std::invoke_result_t<F, ARGS...>,
+            class = typename std::enable_if<std::is_same_v<T_RETVAL, void>>::type>
+  void Call(std::string const& fn_name, ARGS&&... args) {
+    auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
+    if (pf) {
+      (*pf)(std::forward<ARGS>(args)...);
+    }
+  }
 };
 
 // The "meta-interface" to pass interfaces (impl object instances by references) to and from dlib-s.
-struct IGeneric {
+struct IDLib {
  protected:
-  virtual ~IGeneric() = default;
+  virtual ~IDLib() = default;
 
  public:
+  template <
+      class I,
+      class F,
+      class = typename std::enable_if<std::is_same_v<decltype(std::declval<F>()(*std::declval<I*>())), void>>::type>
+  void Use(F&& f) {
+    if (I* i = dynamic_cast<I*>(this)) {
+      f(*i);
+    }
+  }
+
+  template <
+      class I,
+      class F,
+      class = typename std::enable_if<!std::is_same_v<decltype(std::declval<F>()(*std::declval<I*>())), void>>::type>
+  Optional<decltype(std::declval<F>()(*std::declval<I*>()))> Use(F&& f) {
+    if (I* i = dynamic_cast<I*>(this)) {
+      return f(*i);
+    } else {
+      return nullptr;
+    }
+  }
+
   template <class I, class F, class G = std::function<decltype(std::declval<F>()(*std::declval<I*>()))()>>
-  decltype(std::declval<F>()(*std::declval<I*>())) Use(
+  decltype(std::declval<F>()(*std::declval<I*>())) UseOrDefault(
       F&& f, G&& g = []() -> decltype(std::declval<F>()(*std::declval<I*>())) {
         return decltype(std::declval<F>()(std::declval<I&>()))();
       }) {
