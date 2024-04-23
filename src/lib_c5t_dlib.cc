@@ -142,6 +142,7 @@ class C5T_DLibs_Manager final : public C5T_DLibs_Manager_Interface {
                std::function<void()> cb_fail) override {
     std::lock_guard lock(mutex);
     auto const r = LoadLibAndReloadAsNeededFromLockedSection(name);
+    // TODO(dkorolev): Change the lock to the per-lib one here, release the lock for all the libs!
     if (r.ptr) {
       cb_success(*r.ptr);
       return true;
