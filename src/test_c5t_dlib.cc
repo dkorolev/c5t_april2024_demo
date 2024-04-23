@@ -35,7 +35,7 @@ TEST(DLibTest, Test1_Smoke) {
 }
 
 TEST(DLibTest, Test2_UseInterface_WithoutFoo) {
-  struct ImplWithoutFoo : public virtual IBar {
+  struct ImplWithoutFoo : IBar {
     std::string bar;
     void BarCalledFromDLib(std::string const& s) override { bar = s; }
   };
@@ -48,7 +48,7 @@ TEST(DLibTest, Test2_UseInterface_WithoutFoo) {
 }
 
 TEST(DLibTest, Test2_UseInterface_WithFoo) {
-  struct ImplWithFoo : public virtual IFoo, public virtual IBar {
+  struct ImplWithFoo : IFoo, IBar {
     std::string foo;
     std::string bar;
     int forty_two = 42;

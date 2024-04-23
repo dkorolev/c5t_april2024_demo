@@ -9,15 +9,17 @@
 //    - ...
 // 2) Renames and does the symlinks magic as the `.so` file changes on disk and is requested to be reloaded.
 //    The issue is that by default the environment, at least on Linux, will not even attempt to re-load the same lib.
-// 3) Offers the generic `IGeneric` and `IGeneric::Use<T>()` means to call other stuff.
+// 3) Exposes the generic `.Call()` inteface, as well as the `CallOrDefault()` one.
+//    TODO(dkorolev): Make them cleaner and document them better.
+// 4) Offers the generic `IGeneric` and `IGeneric::Use<T>()` means to call other stuff.
 //    The code defined in the `dlib_*` can receive implementations of many interfaces at once.
 //    At the very least, the logger and the lifetime managers come in handy.
 //
 // Usage:
-// 1) Create an interface provider as `class MyInterface : public virtual IGeneric`.
-// 2) Have the `dlib`-exposed function be some `extern "C" void MyDLibExternalFunction(IGeneric& dlib);`
-// 3) In that function, `dlib.Use<MyInterface>(...)`, see the `demo_*` in (some) C5T repo for details.
-// 4) Call it with an instance of your `MyInterface`, see the `demo_*` in (some) C5T repo for details.
+// 1) Create an interface provider as `struct IMyInterface : virtual IDlib`.
+// 2) Have the `dlib`-exposed function be some `extern "C" void MyDLibExternalFunction(IDLib& dlib);`
+// 3) In that function, `dlib.Use<void(IMyInterface&)>(...)`, see the `demo_*` in (some) C5T repo for details.
+// 4) Call it with an instance of your `IMyInterface`, see the `demo_*` in (some) C5T repo for details.
 
 #include <functional>
 #include <memory>

@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
           std::vector<std::pair<int, std::string>> broadcasts;
         };
         current::WaitableAtomic<State> wa;
-        struct MsgReplier : public virtual IMsgReplier {
+        struct MsgReplier : IMsgReplier {
           current::WaitableAtomic<State>& wa;
           char const* pmsg = nullptr;
           MsgReplier(current::WaitableAtomic<State>& wa) : wa(wa) {}
