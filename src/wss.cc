@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
           MsgReplier(current::WaitableAtomic<State>& wa) : wa(wa) {}
           char const* CurrentMessage() override { return pmsg; }
           void ReplyToAll(std::string const& msg) override {
-            wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(2024, msg); });
+            wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(0, msg); });
           }
         };
         MsgReplier impl_msgreplier(wa);
