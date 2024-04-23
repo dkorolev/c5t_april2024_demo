@@ -135,10 +135,10 @@ int main(int argc, char** argv) {
           std::vector<std::pair<int, std::string>> broadcasts;
         };
         current::WaitableAtomic<State> wa;
-        struct MsgReplier : IMsgReplier {
+        struct MsgReplier : IMsgReplier, ILogger {
           current::WaitableAtomic<State>& wa;
           char const* pmsg = nullptr;
-          MsgReplier(current::WaitableAtomic<State>& wa) : wa(wa) {}
+          MsgReplier(current::WaitableAtomic<State>& wa) : ILogger(C5T_LOGGER()), wa(wa) {}
           char const* CurrentMessage() override { return pmsg; }
           void ReplyToAll(std::string const& msg) override {
             wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(0, msg); });
