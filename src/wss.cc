@@ -145,7 +145,8 @@ int main(int argc, char** argv) {
                     break;
                   }
                   for (int id : to_greet) {
-                    runtime(current::ToString(id) + "\noh hi, from " + GitCommit() + '\n');
+                    runtime(current::ToString(id) + "\n# server " + GitCommit().substr(0u, 7u) + '\n');
+                    runtime(current::ToString(id) + "\n# you are client index " + current::ToString(id) + '\n');
                   }
 
                   for (auto const& e : broadcasts) {

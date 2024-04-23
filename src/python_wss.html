@@ -33,11 +33,16 @@
       };
       e_form.addEventListener("submit", doSubmit);
       e_cmd.focus();
+      let connection_status = false;
       const runWs = () => {
         if ("WebSocket" in window) {
           ws = new WebSocket(wsurl);
           ws.onopen = () => {
             e_status.innerText = "connected";
+            if (!connection_status) {
+              connection_status = true;
+              e_out.innerText = e_out.innerText + "# connected\n";
+            }
           };
           ws.onmessage = (e) => {
             e_status.innerHTML = "connected";
@@ -45,6 +50,10 @@
           };
           ws.onclose = () => {
             e_status.innerText = "server disconnected";
+            if (connection_status) {
+              connection_status = false;
+              e_out.innerText = e_out.innerText + "# disconnected\n";
+            }
             ws = null;
             setTimeout(runWs, 500);
           };
