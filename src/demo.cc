@@ -129,9 +129,9 @@ int main(int argc, char** argv) {
     C5T_DLIB_USE(
         name,
         [&r](C5T_DLib& dlib) {
-          auto const p = dlib.template Get<std::string()>("foo");
-          if (p) {
-            r("has foo(): " + (*p)() + '\n');
+          auto const s = dlib.Call<std::string()>("foo");
+          if (Exists(s)) {
+            r("has foo(): " + Value(s) + '\n');
           } else {
             r("no foo()\n");
           }

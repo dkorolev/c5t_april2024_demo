@@ -22,14 +22,39 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <type_traits>
+
+#include "typesystem/optional.h"
+#include "typesystem/helpers.h"  // IWYU pragma: keep
 
 // The thinnest possible wrapper over a loaded `dlib`.
-struct C5T_DLib {
-  virtual ~C5T_DLib() = default;
+class C5T_DLib {
+ protected:
   virtual void* GetRawPF(std::string const& fn_name) = 0;
-  template <typename F_PTR>
-  F_PTR* Get(std::string const& fn_name) {
-    return reinterpret_cast<F_PTR*>(GetRawPF(fn_name));
+
+ public:
+  virtual ~C5T_DLib() = default;
+
+  bool Has(std::string const& fn_name) { return GetRawPF(fn_name) != nullptr; }
+
+  template <typename F, typename... ARGS, typename T_RETVAL = std::invoke_result_t<F, ARGS...>>
+  T_RETVAL CallOrDefault(std::string const& fn_name, ARGS&&... args) {
+    auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
+    if (pf) {
+      return (*pf)(std::forward<ARGS>(args)...);
+    } else {
+      return T_RETVAL();
+    }
+  }
+
+  template <typename F, typename... ARGS, typename T_RETVAL = std::invoke_result_t<F, ARGS...>>
+  Optional<T_RETVAL> Call(std::string const& fn_name, ARGS&&... args) {
+    auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
+    if (pf) {
+      return (*pf)(std::forward<ARGS>(args)...);
+    } else {
+      return nullptr;
+    }
   }
 };
 
