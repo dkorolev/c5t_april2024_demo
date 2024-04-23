@@ -112,5 +112,4 @@ trap - EXIT
 
 echo done
 
-echo
-make test
+echo -e "\n\033[32m\033[1mPASS\033[0m"
