@@ -129,6 +129,26 @@ struct IDLib {
   }
 };
 
+// Forward-declared `dlib` interface for `C5T_LOGGER`.
+namespace current::logger {
+class C5T_LOGGER_SINGLETON_Interface;
+}  // namespace current::logger
+
+class ILogger : public virtual IDLib {
+ private:
+  current::logger::C5T_LOGGER_SINGLETON_Interface& logger_;
+  ILogger() = delete;
+
+ public:
+  // Construct and pass as: `: ILogger(C5T_LOGGER())`.
+  // Full form: `struct MyInterface : ILogger, ... { MyInterface(...) : ILogger(C5T_LOGGER()), ...`.
+  ILogger(current::logger::C5T_LOGGER_SINGLETON_Interface& logger) : logger_(logger) {}
+
+  // Enable with: `C5T_LOGGER_USE(ilogger)`.
+  // Full form: `iface.Use<ILogger>([](ILogger& logger) { C5T_LOGGER_USE(logger); });`.
+  current::logger::C5T_LOGGER_SINGLETON_Interface& Logger() { return logger_; }
+};
+
 // The public interface, to enable `C5T_LIFETIME_MANAGER`-level injection.
 enum class C5T_DLIB_RELOAD_STATUS : int { InternalError, Fail, Loaded, UpToDate, Reloaded };
 struct C5T_DLIB_RELOAD_RESULT final {

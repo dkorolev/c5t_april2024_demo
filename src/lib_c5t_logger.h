@@ -72,26 +72,28 @@ struct C5T_LOGGER_SINGLETON_Holder final {
   }
 };
 
-inline C5T_LOGGER_SINGLETON_Interface& C5T_LOGGER_INSTANCE() {
-  return current::Singleton<C5T_LOGGER_SINGLETON_Holder>().Val();
-}
-
 }  // namespace current::logger
+
+inline current::logger::C5T_LOGGER_SINGLETON_Interface& C5T_LOGGER() {
+  return current::Singleton<current::logger::C5T_LOGGER_SINGLETON_Holder>().Val();
+}
 
 inline void C5T_LOGGER_USE(current::logger::C5T_LOGGER_SINGLETON_Interface& impl) {
   current::Singleton<current::logger::C5T_LOGGER_SINGLETON_Holder>().Use(impl);
 }
 
+template <class T>
+void C5T_LOGGER_USE(T&& wrapper) {
+  C5T_LOGGER_USE(wrapper.Logger());
+}
+
 inline void C5T_LOGGER_SET_LOGS_DIR(std::string dir) { current::logger::C5T_LOGGER_CREATE_SINGLETON().SetLogsDir(dir); }
 
-#define C5T_LOGGER_LIST(cb) current::logger::C5T_LOGGER_INSTANCE().C5T_LOGGER_LIST_Impl(cb)
-#define C5T_LOGGER_FIND(key, cb_found, cb_notfound) \
-  current::logger::C5T_LOGGER_INSTANCE().C5T_LOGGER_FIND_Impl(key, cb_found, cb_notfound)
+#define C5T_LOGGER_LIST(cb) C5T_LOGGER().C5T_LOGGER_LIST_Impl(cb)
+#define C5T_LOGGER_FIND(key, cb_found, cb_notfound) C5T_LOGGER().C5T_LOGGER_FIND_Impl(key, cb_found, cb_notfound)
 
 // NOTE(dkorolev): This is deliberately not "pimpl", since it's not to be used from `dlib_*.cc` sources!
-inline current::logger::C5T_LOGGER_Interface& C5T_LOGGER(std::string const& name) {
-  return current::logger::C5T_LOGGER_INSTANCE()[name];
-}
+inline current::logger::C5T_LOGGER_Interface& C5T_LOGGER(std::string const& name) { return C5T_LOGGER()[name]; }
 
 #if 0
 
