@@ -173,11 +173,16 @@ int main(int argc, char** argv) {
                   int id;
                   s += sscanf(s, "%d", &id);
                   ++s;
-                  wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(id, s); });
-                  impl_msgreplier.pmsg = s;
-                  C5T_DLIB_USE("msgreplier", [&impl_msgreplier](C5T_DLib& dlib) {
-                    dlib.Call<void(IDLib&)>("OnBroadcast", impl_msgreplier);
-                  });
+                  if (std::string("stop") == s) {
+                    wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(0, "stopping"); });
+                    time_to_stop_http_server_and_die.SetValue(true);
+                  } else {
+                    wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(id, s); });
+                    impl_msgreplier.pmsg = s;
+                    C5T_DLIB_USE("msgreplier", [&impl_msgreplier](C5T_DLib& dlib) {
+                      dlib.Call<void(IDLib&)>("OnBroadcast", impl_msgreplier);
+                    });
+                  }
                 }
               },
               [&](Popen2Runtime& runtime) {

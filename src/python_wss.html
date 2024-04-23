@@ -4,7 +4,14 @@
   <body>
     <p><div id="status">initializing ...</div></p>
     <form id="form">
-      <input type="text" id="cmd" name="cmd" placeholder="type here, clear to clear, stop to stop server" size="50" />
+      <input
+        type="text"
+        id="cmd"
+        name="cmd"
+        autocomplete=false
+        placeholder="type here, clear to clear, stop to stop server, 2+2 or c=100 to test the dlib"
+        size="100"
+      />
       <button type="submit">Enter</button>
     </form>
     <p><div id="out"></p>
