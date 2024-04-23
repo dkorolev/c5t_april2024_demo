@@ -4,11 +4,12 @@
 #include "bricks/strings/join.h"
 #include "bricks/strings/split.h"
 #include "bricks/sync/waitable_atomic.h"
+#include "dlib_ext_msgreplier.h"
+#include "lib_build_info.h"
+#include "lib_c5t_dlib.h"
 #include "lib_c5t_lifetime_manager.h"
 #include "lib_c5t_logger.h"
 #include "lib_c5t_popen2.h"  // IWYU pragma: keep
-#include "lib_c5t_dlib.h"
-#include "lib_build_info.h"
 
 inline std::string BasePathOf(std::string const& s) {
   std::vector<std::string> parts = current::strings::Split(s, current::FileSystem::GetPathSeparator());
@@ -134,6 +135,16 @@ int main(int argc, char** argv) {
           std::vector<std::pair<int, std::string>> broadcasts;
         };
         current::WaitableAtomic<State> wa;
+        struct MsgReplier : public virtual IMsgReplier {
+          current::WaitableAtomic<State>& wa;
+          char const* pmsg = nullptr;
+          MsgReplier(current::WaitableAtomic<State>& wa) : wa(wa) {}
+          char const* CurrentMessage() override { return pmsg; }
+          void ReplyToAll(std::string const& msg) override {
+            wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(2024, msg); });
+          }
+        };
+        MsgReplier impl_msgreplier(wa);
         bool done = false;
         std::thread t([&]() {
           time_to_stop_http_server_and_die.Wait();
@@ -163,6 +174,10 @@ int main(int argc, char** argv) {
                   s += sscanf(s, "%d", &id);
                   ++s;
                   wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(id, s); });
+                  impl_msgreplier.pmsg = s;
+                  C5T_DLIB_USE("msgreplier", [&impl_msgreplier](C5T_DLib& dlib) {
+                    dlib.Call<void(IDLib&)>("OnBroadcast", impl_msgreplier);
+                  });
                 }
               },
               [&](Popen2Runtime& runtime) {
