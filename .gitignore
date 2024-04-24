@@ -7,6 +7,8 @@ src/dlib_ext_gitignored.cc
 .current/
 .current_debug/
 
+.tmp*
+
 current/
 
 *.swp
