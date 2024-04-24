@@ -9,6 +9,15 @@ CURRENT_STRUCT(FormResponse) {
   CURRENT_FIELD(msg, Optional<std::string>);
   // What to append to the URL.
   CURRENT_FIELD(fwd, Optional<std::string>);
+
+  FormResponse& Msg(std::string s) {
+    msg = std::move(s);
+    return *this;
+  }
+  FormResponse& Fwd(std::string s) {
+    fwd = std::move(s);
+    return *this;
+  }
 };
 
 CURRENT_STRUCT(Field) {

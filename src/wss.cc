@@ -10,6 +10,10 @@
 #include "lib_c5t_lifetime_manager.h"
 #include "lib_c5t_logger.h"
 #include "lib_c5t_popen2.h"  // IWYU pragma: keep
+#include "lib_htmlform.h"
+
+CURRENT_STRUCT(StopResponseSchema) { CURRENT_FIELD(msg, std::string); };
+CURRENT_STRUCT(SumResponseSchema) { CURRENT_FIELD(sum, int64_t); };
 
 inline std::string BasePathOf(std::string const& s) {
   std::vector<std::string> parts = current::strings::Split(s, current::FileSystem::GetPathSeparator());
@@ -90,12 +94,60 @@ int main(int argc, char** argv) {
       "/", [&html](Request r) { r(html, HTTPResponseCode.OK, current::net::constants::kDefaultHTMLContentType); });
 
   routes += http.Register("/stop", [&time_to_stop_http_server_and_die](Request r) {
-    r("stopping\n",
-      HTTPResponseCode.Found,
-      current::net::http::Headers({{"Location", "/up?from=stop"}, {"Cache-Control", "no-store, must-revalidate"}}),
-      current::net::constants::kDefaultHTMLContentType);
-    time_to_stop_http_server_and_die.SetValue(true);
+    using namespace current::htmlform;
+    if (r.method == "GET") {
+      auto const f = Form()
+                         .Title("Demo Stop Button")
+                         .Caption("Press the button below to stop the service.")
+                         .Add(Field("msg").Text("Optional message").Placeholder("... and thanks for all the fish ..."))
+                         .ButtonText("Stop!");
+      r(FormAsHTML(f), HTTPResponseCode.OK, current::net::constants::kDefaultHTMLContentType);
+    } else {
+      try {
+        auto const body = ParseJSON<StopResponseSchema>(r.body);
+        if (!body.msg.empty()) {
+          std::cout << "optional stop message: " << body.msg << std::endl;
+        }
+      } catch (current::Exception& e) {
+      }
+      r(FormResponse().Fwd("/initiated"));
+      time_to_stop_http_server_and_die.SetValue(true);
+    }
   });
+
+  routes += http.Register("/stop/initiated", [](Request r) { r("roger that, we're tearing down\n"); });
+
+  routes += http.Register("/sum", [](Request r) {
+    using namespace current::htmlform;
+    if (r.method == "GET") {
+      auto const f = Form()
+                         .Add(Field("a").Text("First summand").Placeholder("3 for example"))   //.Value("3"))
+                         .Add(Field("b").Text("Second summand").Placeholder("4 for example"))  // .Value("4"))
+                         .Title("Current Sum")
+                         .Caption("Sum")
+                         .ButtonText("Add")
+                         .OnSubmit(R"({
+        const a = parseInt(input.a);
+        if (isNaN(a)) return { error: "A is not a number." };
+        const b = parseInt(input.b);
+        if (isNaN(b)) return { error: "B is not a number." };
+        return { sum: a + b };
+      })");
+      r(FormAsHTML(f), HTTPResponseCode.OK, current::net::constants::kDefaultHTMLContentType);
+    } else {
+      FormResponse res;
+      try {
+        auto const body = ParseJSON<SumResponseSchema>(r.body);
+        res.fwd = "/is/" + current::ToString(body.sum);
+      } catch (current::Exception& e) {
+        res.msg = "error!";
+      }
+      r(res);
+    }
+  });
+
+  routes += http.Register(
+      "/sum/is", URLPathArgs::CountMask::One, [](Request r) { r("the sum is " + r.url_path_args[0] + '\n'); });
 
   routes += http.Register("/dlib", [](Request r) {
     std::ostringstream oss;
