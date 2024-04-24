@@ -1,0 +1,24 @@
+name: timings
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches:
+    - main
+
+jobs:
+  run:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]  #, macos-latest]
+        test_make_target: [release, debug]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: git clone
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: ./times_to_rebuild.sh ${{ matrix.test_make_target }}
+        run: ./times_to_rebuild.sh ${{ matrix.test_make_target }}
