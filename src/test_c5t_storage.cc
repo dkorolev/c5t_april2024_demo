@@ -5,36 +5,53 @@
 #include "bricks/strings/join.h"
 #include "bricks/time/chrono.h"
 
-#include "typesystem/struct.h"
-#include "typesystem/optional.h"
-
 #include "lib_c5t_storage.h"
+#include "test_c5t_storage.h"
 
 inline std::string CurrentTestName() { return ::testing::UnitTest::GetInstance()->current_test_info()->name(); }
 
-struct InitStorageOnce final {
-  InitStorageOnce() {
-    std::string const storage_base_path = []() {
-      // NOTE(dkorolev): I didn't find a quick way to get current binary dir and/or argv[0] from under `googletest`.
-      std::vector<std::string> path = current::strings::Split(__FILE__, current::FileSystem::GetPathSeparator());
-      path.pop_back();
+struct TestStorageDir final {
+  std::string const dir;
+
+  operator std::string const&() const { return dir; }
+
+  TestStorageDir() : dir(InitDir()) {}
+
+  static std::string InitDir() {
+    // NOTE(dkorolev): I didn't find a quick way to get current binary dir and/or argv[0] from under `googletest`.
+    std::vector<std::string> path = current::strings::Split(__FILE__, current::FileSystem::GetPathSeparator());
+    path.pop_back();
 #ifdef NDEBUG
-      path.back() = ".current";
+    path.back() = ".current";
 #else
-      path.back() = ".current_debug";
+    path.back() = ".current_debug";
 #endif
-      path.push_back(current::ToString(current::time::Now().count()));
-      std::string const res = current::strings::Join(path, current::FileSystem::GetPathSeparator());
-      return *__FILE__ == current::FileSystem::GetPathSeparator() ? "/" + res : res;
-    }();
-    C5T_STORAGE_SET_BASE_DIR(storage_base_path);
+    path.push_back(current::ToString(current::time::Now().count()));
+    std::string const res = current::strings::Join(path, current::FileSystem::GetPathSeparator());
+    std::string const dir = *__FILE__ == current::FileSystem::GetPathSeparator() ? "/" + res : res;
+    current::FileSystem::MkDir(dir, current::FileSystem::MkDirParameters::Silent);
+    return dir;
   }
 };
 
-C5T_STORAGE_DECLARE(kv1, std::string, PERSIST_LATEST);
+TEST(StorageTest, FieldsList) {
+  std::vector<std::string> v;
+  C5T_STORAGE_LIST_FIELDS([&v](std::string const& s) { v.push_back(s); });
+  EXPECT_EQ("kv1,kv2,kv3", current::strings::Join(v, ','));
+}
+
+TEST(StorageTest, SmokeNeedStorage) {
+  ASSERT_THROW(C5T_STORAGE(kv1), StorageNotInitializedException);
+  ASSERT_THROW(C5T_STORAGE(kv1).Has("nope"), StorageNotInitializedException);
+  auto const dir = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName();
+  auto const storage_scope = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir);
+  EXPECT_FALSE(C5T_STORAGE(kv1).Has("nope"));
+}
 
 TEST(StorageTest, SmokeMapStringString) {
-  current::Singleton<InitStorageOnce>();
+  auto const dir = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName();
+  auto const storage_scope = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir);
+  C5T_STORAGE_INJECT(storage_scope);
 
   {
     ASSERT_FALSE(C5T_STORAGE(kv1).Has("k"));
@@ -54,23 +71,9 @@ TEST(StorageTest, SmokeMapStringString) {
   }
 }
 
-CURRENT_STRUCT(SomeJSON) {
-  CURRENT_FIELD(foo, int32_t, 0);
-  CURRENT_FIELD(bar, Optional<std::string>);
-  SomeJSON& SetFoo(int32_t v) {
-    foo = v;
-    return *this;
-  }
-  SomeJSON& SetBar(std::string v) {
-    bar = std::move(v);
-    return *this;
-  }
-};
-
-C5T_STORAGE_DECLARE(kv2, SomeJSON, PERSIST_LATEST);
-
 TEST(StorageTest, SmokeMapStringObject) {
-  current::Singleton<InitStorageOnce>();
+  auto const dir = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName();
+  auto const storage_scope = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir);
 
   {
     ASSERT_FALSE(C5T_STORAGE(kv2).Has("k"));
@@ -101,10 +104,39 @@ TEST(StorageTest, SmokeMapStringObject) {
   }
 }
 
+TEST(StorageTest, SmokeMapPersists) {
+  auto const dir1 = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName() + '1';
+  auto const dir2 = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName() + '2';
+  current::FileSystem::MkDir(dir1, current::FileSystem::MkDirParameters::Silent);
+
+  {
+    // Step 1/3: Create something and have it persisted.
+    auto const storage_scope1 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir1);
+    C5T_STORAGE_INJECT(storage_scope1);
+    EXPECT_FALSE(C5T_STORAGE(kv1).Has("k"));
+    C5T_STORAGE(kv1).Set("k", "v");
+  }
+
+  {
+    // Step 2/3: Restore from the persisted storage
+    auto const storage_scope2 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir1);
+    C5T_STORAGE_INJECT(storage_scope2);
+    EXPECT_TRUE(C5T_STORAGE(kv1).Has("k"));
+  }
+
+  {
+    // Step 3/3: But confirm that the freshly created storage from a different dir is empty.
+    auto const storage_scope2 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir2);
+    C5T_STORAGE_INJECT(storage_scope3);
+    EXPECT_FALSE(C5T_STORAGE(kv1).Has("k"));
+  }
+}
+
 // TO TEST:
-// [ ] do not use the global storage singleton, inject one per test
-// [ ] persist restore trivial
+// [x] do not use the global storage singleton, inject one per test
+// [x] persist restore trivial
 // [ ] persist restore recovering
 // [ ] persist move old files around, to not scan through them unnecesarily
 // [ ] persist evolve, use `JSONFormat::Minimalistic`
 // [ ] persist set logger and errors on failing to evolve
+// [ ] injected storage
