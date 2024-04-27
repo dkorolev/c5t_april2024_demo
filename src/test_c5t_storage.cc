@@ -6,7 +6,7 @@
 #include "bricks/time/chrono.h"
 
 #include "lib_c5t_storage.h"
-#include "test_c5t_storage.h"
+#include "lib_test_storage.h"
 
 inline std::string CurrentTestName() { return ::testing::UnitTest::GetInstance()->current_test_info()->name(); }
 
