@@ -1,11 +1,11 @@
-#include "lib_demo_routes.h"
+#include "lib_demo_routes_heavy.h"
 
 #include "blocks/http/api.h"
 #include "lib_c5t_logger.h"
 #include "lib_c5t_lifetime_manager.h"
 #include "lib_c5t_popen2.h"  // IWYU pragma: keep
 
-void RegisterDemoRoutes(HTTPServerContext& ctx) {
+void RegisterDemoRoutesHeavy(HTTPServerContext& ctx) {
   current::http::HTTPServerPOSIX& http = ctx.http;
   HTTPRoutesScope& routes = *reinterpret_cast<HTTPRoutesScope*>(ctx.proutes);
 

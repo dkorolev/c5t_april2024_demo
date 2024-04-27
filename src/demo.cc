@@ -6,9 +6,9 @@
 #include "bricks/sync/waitable_atomic.h"
 #include "lib_c5t_lifetime_manager.h"
 #include "lib_c5t_logger.h"
-#include "lib_demo_routes.h"
 #include "lib_demo_routes_basic.h"
 #include "lib_demo_routes_dlib.h"
+#include "lib_demo_routes_heavy.h"
 #include "lib_http_server.h"
 
 DEFINE_uint16(port, 5555, "");
@@ -45,8 +45,8 @@ void Run(HTTPServerContext& ctx) {
   current::WaitableAtomic<bool> time_to_stop_http_server_and_die(false);
 
   RegisterDemoRoutesBasic(time_to_stop_http_server_and_die, ctx);
+  RegisterDemoRoutesHeavy(ctx);
   RegisterDemoRoutesDLib(current::Singleton<BinPathSingleton>().bin_path, ctx);
-  RegisterDemoRoutes(ctx);
 
   time_to_stop_http_server_and_die.Wait();
   std::cout << "terminating per user request" << std::endl;
