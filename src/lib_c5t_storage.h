@@ -4,9 +4,9 @@
 #include <string>
 #include <unordered_map>
 
+// NOTE: No need in JSON stuff in the `.h` file with the interface, although the `.cc` file will need them.
 #include "typesystem/optional.h"
-#include "typesystem/helpers.h"             // IWYU pragma: keep
-#include "typesystem/serialization/json.h"  // IWYU pragma: keep
+#include "typesystem/helpers.h"  // IWYU pragma: keep
 #include "bricks/exception.h"
 
 struct StorageKeyNotFoundException final : current::Exception {};
@@ -23,6 +23,7 @@ struct C5T_STORAGE_FIELD_Interface {
   C5T_STORAGE_FIELD_Interface() = default;
 };
 
+// TODO: syntax
 void _C5T_STORAGE_DeclareField(C5T_STORAGE_FIELD_Interface*, std::string const&);
 
 class C5T_STORAGE_Interface {
@@ -50,6 +51,8 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
 
  protected:
   C5T_STORAGE_FIELD(char const* name) : name_(name) { _C5T_STORAGE_DeclareField(this, name_); }
+  virtual std::string DoSerialize(T const&) const = 0;
+  virtual void DoDeserialize(std::string const&, std::unique_ptr<T>&) const = 0;
 
  public:
   // TODO: move from the header file what can be moved to the source file
@@ -75,7 +78,7 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
         if (Exists(s)) {
           try {
             // TODO: evolve
-            p.second = std::make_unique<T>(ParseJSON<T, JSONFormat::Minimalistic>(Value(s)));
+            self.DoDeserialize(Value(s), p.second);
           } catch (current::Exception const&) {
             // TODO: log the error, test it
           }
@@ -88,7 +91,7 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
 
     void InnerSet(std::string key, T const& value) const {
       // TODO: better save? incl build time and moving the call to `JSON` our of the header file?
-      impl.DoSave(self.name_, key, JSON<JSONFormat::Minimalistic>(value));
+      impl.DoSave(self.name_, key, self.DoSerialize(value));
       rhs_t& p = self.contents_[key];
       p.first = true;
       if (p.second) {
@@ -125,8 +128,9 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
       InnerSet(std::move(key), std::forward<TT>(value));
     }
 
-    // TODO: Del
+    // TODO: Del().
   };
+
   Wrapper operator()() { return Wrapper(*this, C5T_STORAGE_INSTANCE()); }
   // TODO: test `const`-ness.
   Wrapper operator()() const { return Wrapper(*this, C5T_STORAGE_INSTANCE()); }
@@ -134,11 +138,28 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
 
 // TODO: evolve
 
-#define C5T_STORAGE_DECLARE(name, type, meta)                             \
-  class C5T_STORAGE_FIELD_##name final : public C5T_STORAGE_FIELD<type> { \
-   public:                                                                \
-    C5T_STORAGE_FIELD_##name() : C5T_STORAGE_FIELD(#name) {}              \
-  } C5T_STORAGE_FIELD_INSTANCE_##name
+#define C5T_STORAGE_DECLARE_FIELD(name, type)                                      \
+  class C5T_STORAGE_FIELD_##name final : public C5T_STORAGE_FIELD<type> {          \
+   protected:                                                                      \
+    std::string DoSerialize(type const&) const override;                           \
+    void DoDeserialize(std::string const&, std::unique_ptr<type>&) const override; \
+                                                                                   \
+   public:                                                                         \
+    C5T_STORAGE_FIELD_##name() : C5T_STORAGE_FIELD(#name) {}                       \
+  };                                                                               \
+  extern C5T_STORAGE_FIELD_##name C5T_STORAGE_FIELD_INSTANCE_##name
+
+// NOTE: For `C5T_STORAGE_DEFINE_FIELD` and for `C5T_STORAGE_FIELD`, JSON & serialization need to be `#include`-d.
+#define C5T_STORAGE_DEFINE_FIELD(name, type, meta)                                                                     \
+  std::string C5T_STORAGE_FIELD_##name::DoSerialize(type const& x) const { return JSON<JSONFormat::Minimalistic>(x); } \
+  void C5T_STORAGE_FIELD_##name::DoDeserialize(std::string const& s, std::unique_ptr<type>& p) const {                 \
+    if (p) {                                                                                                           \
+      ParseJSON<type, JSONFormat::Minimalistic>(s, *p);                                                                \
+    } else {                                                                                                           \
+      p = std::make_unique<type>(ParseJSON<type, JSONFormat::Minimalistic>(s));                                        \
+    }                                                                                                                  \
+  }                                                                                                                    \
+  C5T_STORAGE_FIELD_##name C5T_STORAGE_FIELD_INSTANCE_##name
 
 // To access storage fields.
 #define C5T_STORAGE(name) C5T_STORAGE_FIELD_INSTANCE_##name()

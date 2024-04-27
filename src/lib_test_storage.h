@@ -1,9 +1,9 @@
-#include "typesystem/struct.h"
-#include "typesystem/optional.h"
+#pragma once
 
 #include "lib_c5t_storage.h"
 
-C5T_STORAGE_DECLARE(kv1, std::string, PERSIST_LATEST);
+#include "typesystem/struct.h"
+#include "typesystem/optional.h"
 
 CURRENT_STRUCT(SomeJSON) {
   CURRENT_FIELD(foo, int32_t, 0);
@@ -18,5 +18,6 @@ CURRENT_STRUCT(SomeJSON) {
   }
 };
 
-C5T_STORAGE_DECLARE(kv2, SomeJSON, PERSIST_LATEST);
-C5T_STORAGE_DECLARE(kv3, int32_t, DO_NOT_PERSIST);
+C5T_STORAGE_DECLARE_FIELD(kv1, std::string);
+C5T_STORAGE_DECLARE_FIELD(kv2, SomeJSON);
+C5T_STORAGE_DECLARE_FIELD(kv3, int32_t);
