@@ -30,3 +30,18 @@ void RunHTTPServer(uint16_t port_number, std::function<void(HTTPServerContext&)>
     C5T_LIFETIME_MANAGER_EXIT(1);
   }
 }
+
+void HTTPServerContext::FastRegister(std::string const& route,
+                                     HTTPServerContext::CountMask mask,
+                                     std::function<current::http::Response(FastRequest const&)> f) {
+  *(reinterpret_cast<HTTPRoutesScope*>(proutes)) +=
+      http.Register(route, static_cast<URLPathArgs::CountMask>(mask), [ff = std::move(f)](Request r) {
+        FastRequest req(r.method, r.body);
+        req.url_path_args.reserve(r.url_path_args.size());
+        for (size_t i = 0; i < r.url_path_args.size(); ++i) {
+          req.url_path_args.push_back(r.url_path_args[i]);
+        }
+        Response res = ff(req);
+        r(res);
+      });
+}

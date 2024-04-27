@@ -1,15 +1,13 @@
 #include "lib_demo_routes_dlib.h"
-#include "blocks/http/api.h"
+
 #include "lib_c5t_dlib.h"
 #include "lib_http_server.h"
 
 void RegisterDemoRoutesDLib(std::string const& bin_path, HTTPServerContext& ctx) {
   C5T_DLIB_SET_BASE_DIR(bin_path);
 
-  current::http::HTTPServerPOSIX& http = ctx.http;
-  HTTPRoutesScope& routes = *reinterpret_cast<HTTPRoutesScope*>(ctx.proutes);
-
-  routes += http.Register("/dlib", [](Request r) {
+  ctx.FastRegister("/dlib", HTTPServerContext::CountMask::None, [](FastRequest const&) {
+    current::http::Response resp;
     std::ostringstream oss;
     int n = 0u;
     C5T_DLIB_LIST([&oss, &n](std::string const& s) {
@@ -17,38 +15,43 @@ void RegisterDemoRoutesDLib(std::string const& bin_path, HTTPServerContext& ctx)
       ++n;
     });
     if (!n) {
-      r("no dlibs loaded\n");
+      resp.Body("no dlibs loaded\n");
     } else {
-      r(oss.str().substr(1));
+      resp.Body(oss.str().substr(1));
     }
+    return resp;
   });
 
-  routes += http.Register("/dlib", URLPathArgs::CountMask::One, [](Request r) {
+  ctx.FastRegister("/dlib", HTTPServerContext::CountMask::One, [](FastRequest const& r) {
     std::string const name = r.url_path_args[0];
+    current::http::Response resp;
     C5T_DLIB_USE(
         name,
-        [&r](C5T_DLib& dlib) {
+        [&resp](C5T_DLib& dlib) {
           auto const s = dlib.Call<std::string()>("foo");
           if (Exists(s)) {
-            r("has foo(): " + Value(s) + '\n');
+            resp.Body("has foo(): " + Value(s) + '\n');
           } else {
-            r("no foo()\n");
+            resp.Body("no foo()\n");
           }
         },
-        [&r]() { r("no such dlib\n"); });
+        [&resp]() { resp.Body("no such dlib\n"); });
+    return resp;
   });
 
-  routes += http.Register("/dlib_reload", URLPathArgs::CountMask::One, [](Request r) {
+  ctx.FastRegister("/dlib_reload", HTTPServerContext::CountMask::One, [](FastRequest const& r) {
     std::string const name = r.url_path_args[0];
+    current::http::Response resp;
     auto const res = C5T_DLIB_RELOAD(name).res;
     if (res == C5T_DLIB_RELOAD_STATUS::UpToDate) {
-      r("up to date\n");
+      resp.Body("up to date\n");
     } else if (res == C5T_DLIB_RELOAD_STATUS::Loaded) {
-      r("loaded\n");
+      resp.Body("loaded\n");
     } else if (res == C5T_DLIB_RELOAD_STATUS::Reloaded) {
-      r("reloaded\n");
+      resp.Body("reloaded\n");
     } else {
-      r("failed\n");
+      resp.Body("failed\n");
     }
+    return resp;
   });
 }
