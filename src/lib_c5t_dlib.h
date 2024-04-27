@@ -185,5 +185,14 @@ void C5T_DLIB_LIST(std::function<void(std::string)>);
 bool C5T_DLIB_USE(
     std::string const& lib_name, std::function<void(C5T_DLib&)>, std::function<void()> = [] {});
 
+// NOTE(dkorolev): Ugly, extra copy, but should do the job for now.
+template <class F, class G>
+std::invoke_result_t<F, C5T_DLib&> C5T_DLIB_CALL(std::string const& lib_name, F&& f, G&& g) {
+  std::invoke_result_t<F, C5T_DLib&> r;
+  C5T_DLIB_USE(
+      lib_name, [&](C5T_DLib& lib) { r = f(lib); }, [&]() { r = g(); });
+  return r;
+}
+
 // Reloads the lib as needed, with the "symlink trick" so that the library is truly re-loaded.
 C5T_DLIB_RELOAD_RESULT C5T_DLIB_RELOAD(std::string const& lib_name);
