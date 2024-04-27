@@ -33,7 +33,7 @@ void RunHTTPServer(uint16_t port_number, std::function<void(HTTPServerContext&)>
 
 void HTTPServerContext::FastRegister(std::string const& route,
                                      HTTPServerContext::CountMask mask,
-                                     std::function<current::http::Response(FastRequest const&)> f) {
+                                     std::function<FastResponse(FastRequest const&)> f) {
   *(reinterpret_cast<HTTPRoutesScope*>(proutes)) +=
       http.Register(route, static_cast<URLPathArgs::CountMask>(mask), [ff = std::move(f)](Request r) {
         FastRequest req(r.method, r.body);
@@ -41,7 +41,16 @@ void HTTPServerContext::FastRegister(std::string const& route,
         for (size_t i = 0; i < r.url_path_args.size(); ++i) {
           req.url_path_args.push_back(r.url_path_args[i]);
         }
-        Response res = ff(req);
-        r(res);
+        FastResponse res = ff(req);
+        Response res2;
+        res2.Body(std::move(res.body));
+        res2.Code(res.code);
+        for (auto& [k, v] : res.headers) {
+          res2.SetHeader(k, std::move(v));
+        }
+        if (!res.content_type.empty()) {
+          res2.ContentType(std::move(res.content_type));
+        }
+        r(res2);
       });
 }

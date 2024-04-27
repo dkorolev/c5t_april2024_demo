@@ -1,3 +1,5 @@
+#include <sstream>
+
 #include "lib_demo_routes_dlib.h"
 
 #include "lib_c5t_dlib.h"
@@ -7,7 +9,7 @@ void RegisterDemoRoutesDLib(std::string const& bin_path, HTTPServerContext& ctx)
   C5T_DLIB_SET_BASE_DIR(bin_path);
 
   ctx.FastRegister("/dlib", HTTPServerContext::CountMask::None, [](FastRequest const&) {
-    current::http::Response resp;
+    FastResponse resp;
     std::ostringstream oss;
     int n = 0u;
     C5T_DLIB_LIST([&oss, &n](std::string const& s) {
@@ -24,7 +26,7 @@ void RegisterDemoRoutesDLib(std::string const& bin_path, HTTPServerContext& ctx)
 
   ctx.FastRegister("/dlib", HTTPServerContext::CountMask::One, [](FastRequest const& r) {
     std::string const name = r.url_path_args[0];
-    current::http::Response resp;
+    FastResponse resp;
     C5T_DLIB_USE(
         name,
         [&resp](C5T_DLib& dlib) {
@@ -41,7 +43,7 @@ void RegisterDemoRoutesDLib(std::string const& bin_path, HTTPServerContext& ctx)
 
   ctx.FastRegister("/dlib_reload", HTTPServerContext::CountMask::One, [](FastRequest const& r) {
     std::string const name = r.url_path_args[0];
-    current::http::Response resp;
+    FastResponse resp;
     auto const res = C5T_DLIB_RELOAD(name).res;
     if (res == C5T_DLIB_RELOAD_STATUS::UpToDate) {
       resp.Body("up to date\n");

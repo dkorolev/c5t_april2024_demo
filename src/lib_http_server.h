@@ -4,8 +4,7 @@
 #include <functional>
 #include <vector>
 #include <string>
-
-#include "blocks/http/response.h"
+#include "bricks/net/http/codes.h"
 
 namespace current::http {
 struct HTTPServerPOSIX;
@@ -19,6 +18,29 @@ struct FastRequest final {
   std::vector<std::string> url_path_args;
 
   FastRequest(std::string method, std::string const& body) : method(method), body(body) {}
+};
+
+struct FastResponse final {
+  std::string body;
+  current::net::HTTPResponseCodeValue code = current::net::HTTPResponseCodeValue::OK;
+  std::map<std::string, std::string> headers;
+  std::string content_type;
+  FastResponse& Body(std::string s) {
+    body = std::move(s);
+    return *this;
+  }
+  FastResponse& Code(current::net::HTTPResponseCodeValue c) {
+    code = c;
+    return *this;
+  }
+  FastResponse& SetHeader(std::string const& k, std::string v) {
+    headers[k] = std::move(v);
+    return *this;
+  }
+  FastResponse& ContentType(std::string s) {
+    content_type = std::move(s);
+    return *this;
+  }
 };
 
 struct HTTPServerContext {
@@ -37,9 +59,7 @@ struct HTTPServerContext {
     Any = static_cast<CountMaskUnderlyingType>(~0)
   };
 
-  void FastRegister(std::string const& route,
-                    CountMask mask,
-                    std::function<current::http::Response(FastRequest const&)>);
+  void FastRegister(std::string const& route, CountMask mask, std::function<FastResponse(FastRequest const&)>);
 };
 
 void RunHTTPServer(uint16_t port_number, std::function<void(HTTPServerContext&)> code);
