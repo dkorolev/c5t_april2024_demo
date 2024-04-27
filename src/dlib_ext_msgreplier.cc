@@ -11,7 +11,7 @@ extern "C" void OnBroadcast(IDLib& iface) {
     if (!welcome_sent) {
       C5T_LOGGER("replier") << "welcome!";
       msg_replier.ReplyToAll("welcome to the `msgreplier` dlib!");
-      msg_replier.ReplyToAll("try `2+2` or `c=100` to seem me in action");
+      msg_replier.ReplyToAll("try `2+2` or `c=100` to see me in action");
       msg_replier.ReplyToAll("if you change `dlib_ext_msgreplier.cc` and `make`, i will re-load for the next msg");
       welcome_sent = true;
     }
