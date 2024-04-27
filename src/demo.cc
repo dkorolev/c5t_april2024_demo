@@ -1,6 +1,4 @@
-#if 1
 #include "blocks/http/api.h"
-#endif
 
 #include "bricks/dflags/dflags.h"
 #include "bricks/strings/split.h"
@@ -8,14 +6,15 @@
 #include "bricks/file/file.h"
 
 #include "bricks/sync/waitable_atomic.h"
-#include "lib_c5t_popen2.h"  // IWYU pragma: keep
+#include "lib_c5t_dlib.h"
 #include "lib_c5t_lifetime_manager.h"
 #include "lib_c5t_logger.h"
-#include "lib_c5t_dlib.h"
+#include "lib_c5t_popen2.h"  // IWYU pragma: keep
+#include "lib_http_server.h"
 
 DEFINE_uint16(port, 5555, "");
 
-void Run(current::http::HTTPServerPOSIX& http, HTTPRoutesScope routes);
+void Run(HTTPServerContext& ctx);
 
 int main(int argc, char** argv) {
   ParseDFlags(&argc, &argv);
@@ -34,37 +33,12 @@ int main(int argc, char** argv) {
   C5T_LOGGER("demo") << "demo started";
   C5T_LIFETIME_MANAGER_SET_LOGGER([](std::string const& s) { C5T_LOGGER("life") << s; });
 
-  // NOTE(dkorolev): Using two workaround for `HTTP()` for it to work with graceful termination / lifetime management.
-  // 1) [ optional ] Construct it as a `C5T_LIFETIME_MANAGER_TRACKED_INSTANCE()`, not via the `HTTP()` singleton, and
-  // 2) [ required ] Do not call `C5T_LIFETIME_MANAGER_EXIT(0)` directly from the HTTP route handler.
-  // TODO(dkorolev): Have Current's HTTP server use `Owned/Borrowed` at least, or, better yet, the lifetime manager.
-  using current::http::HTTPServerPOSIX;
-
-  [](std::function<bool()> terminating) {
-    uint16_t const port_number = FLAGS_port;
-    try {
-      auto hold_port = current::net::ReservedLocalPort(
-          current::net::ReservedLocalPort::Construct(),
-          port_number,
-          current::net::SocketHandle(current::net::SocketHandle::BindAndListen(), current::net::BarePort(port_number)));
-      std::cout << "listening on http://localhost: " << port_number << ", /stop to terminate" << std::endl;
-      current::http::HTTPServerPOSIX& http =
-          C5T_LIFETIME_MANAGER_TRACKED_INSTANCE(HTTPServerPOSIX, "http server lifetime", std::move(hold_port));
-      auto const start_time = current::time::Now();
-      auto routes = http.Register("/up", [start_time, moved_terminating = std::move(terminating)](Request r) {
-        r(current::strings::Printf("up %0.lfs\n%s",
-                                   1e-6 * (current::time::Now() - start_time).count(),
-                                   moved_terminating() ? "IN TERMINATION SEQUENCE\n" : ""));
-      });
-      Run(http, std::move(routes));
-    } catch (const current::Exception& e) {
-      std::cout << "port " << port_number << " appears to be taken" << std::endl;
-      C5T_LIFETIME_MANAGER_EXIT(1);
-    }
-  }([]() -> bool { return C5T_LIFETIME_MANAGER_SHUTTING_DOWN; });
+  RunHTTPServer(FLAGS_port, Run);
 }
 
-void Run(current::http::HTTPServerPOSIX& http, HTTPRoutesScope routes) {
+void Run(HTTPServerContext& ctx) {
+  current::http::HTTPServerPOSIX& http = ctx.http;
+  HTTPRoutesScope& routes = *reinterpret_cast<HTTPRoutesScope*>(ctx.proutes);
   current::WaitableAtomic<bool> time_to_stop_http_server_and_die(false);  // NOTE(dkorolev): The workaround part 2/2.
   routes += http.Register("/stop", [&time_to_stop_http_server_and_die](Request r) {
     C5T_LOGGER("demo") << "/stop requested";
