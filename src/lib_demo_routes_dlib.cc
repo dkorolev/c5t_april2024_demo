@@ -1,10 +1,6 @@
+#include "lib_demo_routes_dlib.h"
 #include "blocks/http/api.h"
-
-// #include "lib_c5t_logger.h"
-
 #include "lib_c5t_dlib.h"
-// #include "lib_c5t_lifetime_manager.h"
-
 #include "lib_http_server.h"
 
 void RegisterDemoRoutesDLib(std::string const& bin_path, HTTPServerContext& ctx) {
