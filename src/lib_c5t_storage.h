@@ -1,8 +1,14 @@
 #pragma once
 
+// #define C5T_DEBUG_STORAGE
+
 #include <functional>
 #include <string>
 #include <unordered_map>
+
+#ifdef C5T_DEBUG_STORAGE
+#include <iostream>
+#endif  // C5T_DEBUG_STORAGE
 
 // NOTE: No need in JSON stuff in the `.h` file with the interface, although the `.cc` file will need them.
 #include "typesystem/optional.h"
@@ -11,8 +17,10 @@
 
 struct StorageKeyNotFoundException final : current::Exception {};
 struct StorageNotInitializedException final : current::Exception {};
+struct StorageInternalErrorException final : current::Exception {};
 
 // TODO: rethink passing by value to move vs. by reference
+// TODO: do we even need this one?
 struct C5T_STORAGE_Layer {
   bool initialized = false;
 };
@@ -41,20 +49,30 @@ class C5T_STORAGE_Interface {
   virtual C5T_STORAGE_Layer& StorageLayerForField(C5T_STORAGE_FIELD_Interface const&) = 0;
 
   // Stateless, effectively static, inner methods.
+  virtual size_t FieldsCount() const = 0;
+  virtual void ListFields(std::function<void(std::string const&)> cb) = 0;
+
   virtual void DoSave(std::string const& field, std::string const& key, std::string const& value) = 0;
   virtual Optional<std::string> DoLoad(std::string const& field, std::string const& key) = 0;
   virtual void DoDelete(std::string const& field, std::string const& key) = 0;
+
+  // Returns `C5T_STORAGE_FIELD<T>*` of the respective type.
+  virtual C5T_STORAGE_FIELD_Interface* UseFieldTypeErased(std::string const&) = 0;
 };
 
-class C5T_STORAGE_META_SINGLETON_Impl {
+class C5T_STORAGE_META_SINGLETON_Impl final {
  private:
-  std::set<std::string> field_names;
+  std::vector<C5T_STORAGE_FIELD_Interface*> fields;
+  // std::set<std::string> field_names;
 
  public:
-  virtual void DeclareField(C5T_STORAGE_FIELD_Interface const* f) { field_names.insert(f->Name()); }
+  void DeclareField(C5T_STORAGE_FIELD_Interface* f) {
+    fields.push_back(f);
+    //    field_names.insert(f->Name());
+  }
 
-  void ListFields(std::function<void(std::string const&)> cb) {
-    for (auto const& f : field_names) {
+  void VisitAllFields(std::function<void(C5T_STORAGE_FIELD_Interface*)> cb) {
+    for (C5T_STORAGE_FIELD_Interface* f : fields) {
       cb(f);
     }
   }
@@ -64,16 +82,6 @@ inline C5T_STORAGE_META_SINGLETON_Impl& C5T_STORAGE_META_SINGLETON() {
   static C5T_STORAGE_META_SINGLETON_Impl impl;
   return impl;
 }
-
-inline void C5T_STORAGE_LIST_FIELDS(std::function<void(std::string const&)> cb) {
-  C5T_STORAGE_META_SINGLETON().ListFields(std::move(cb));
-}
-
-// Creates and registers the instance of storage to use.
-std::unique_ptr<C5T_STORAGE_Interface> C5T_STORAGE_CREATE_UNIQUE_INSANCE(std::string const& path);
-
-// Throws `StorageNotInitializedException` if neither `CREATE`-d nor `INJECT`-ed.
-C5T_STORAGE_Interface& C5T_STORAGE_INSTANCE();
 
 template <class T>
 struct C5T_STORAGE_FIELD_TYPES {
@@ -176,6 +184,12 @@ class C5T_STORAGE_FIELD_ACCESSOR final {
   void Del(std::string const& key) { InnerDel(key); }
 };
 
+inline C5T_STORAGE_Interface& C5T_STORAGE_INSTANCE();
+
+inline void C5T_STORAGE_LIST_FIELDS(std::function<void(std::string const&)> cb) {
+  C5T_STORAGE_INSTANCE().ListFields(std::move(cb));
+}
+
 template <typename T>
 class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
  private:
@@ -206,9 +220,10 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
     bool DoDeserializeImpl(std::string const&, void*) const override;     \
                                                                           \
    public:                                                                \
+    using type_t = type;                                                  \
     C5T_STORAGE_FIELD_##name() : C5T_STORAGE_FIELD(#name) {}              \
   };                                                                      \
-  extern C5T_STORAGE_FIELD_##name C5T_STORAGE_FIELD_INSTANCE_##name
+  static C5T_STORAGE_FIELD_##name C5T_STORAGE_FIELD_INSTANCE_##name
 
 // NOTE: For `C5T_STORAGE_DEFINE_FIELD` and for `C5T_STORAGE_FIELD`, JSON & serialization need to be `#include`-d.
 #define C5T_STORAGE_DEFINE_FIELD(name, type, meta)                                        \
@@ -222,14 +237,49 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
     } catch (current::Exception const&) {                                                 \
       return false;                                                                       \
     }                                                                                     \
-  }                                                                                       \
-  C5T_STORAGE_FIELD_##name C5T_STORAGE_FIELD_INSTANCE_##name
+  }
 
-// To access storage fields.
-#define C5T_STORAGE(name) C5T_STORAGE_FIELD_INSTANCE_##name()
+// TODO: rename
+struct C5T_Storage_Fields_Singleton final {
+  C5T_STORAGE_Interface* pimpl = nullptr;
+};
 
-// To use the storage as a singleton.
-// #define C5T_STORAGE_SET_BASE_DIR(base_path)  // TODO: implement
+// Creates and registers the instance of storage to use.
+// Not header-only, requires the `.cc` library to be linked against!
+std::unique_ptr<C5T_STORAGE_Interface> C5T_STORAGE_CREATE_UNIQUE_INSANCE(std::string const& path);
+
+// Throws `StorageNotInitializedException` if neither `CREATE`-d nor `INJECT`-ed.
+inline C5T_STORAGE_Interface& C5T_STORAGE_INSTANCE() {
+  auto& s = current::Singleton<C5T_Storage_Fields_Singleton>();
+  if (!s.pimpl) {
+    throw StorageNotInitializedException();
+  } else {
+    return *s.pimpl;
+  }
+}
 
 // To use an externally-provided storage, mostly for the tests and from within `dlib`-s.
-#define C5T_STORAGE_INJECT(x)
+// TODO: Owned/Borrowed or other magic?
+inline void C5T_STORAGE_INJECT(C5T_STORAGE_Interface& storage) {
+  current::Singleton<C5T_Storage_Fields_Singleton>().pimpl = &storage;
+#ifdef C5T_DEBUG_STORAGE
+  std::cerr << "InjectStorage(" << storage.FieldsCount() << ")\n";
+#endif  // C5T_DEBUG_STORAGE
+}
+
+// To access storage fields.
+template <class T>
+C5T_STORAGE_FIELD_ACCESSOR<T> C5T_STORAGE_USE_FIELD(std::string const& name) {
+  auto& storage = C5T_STORAGE_INSTANCE();
+  C5T_STORAGE_FIELD_Interface* pimpl = storage.UseFieldTypeErased(name);
+  if (!pimpl) {
+    throw StorageInternalErrorException();
+  }
+  auto pimpl_typed = dynamic_cast<C5T_STORAGE_FIELD<T>*>(pimpl);
+  if (!pimpl_typed) {
+    throw StorageInternalErrorException();
+  }
+  return C5T_STORAGE_FIELD_ACCESSOR<T>(*pimpl_typed, storage);
+}
+
+#define C5T_STORAGE(name) C5T_STORAGE_USE_FIELD<typename C5T_STORAGE_FIELD_##name::type_t>(#name)
