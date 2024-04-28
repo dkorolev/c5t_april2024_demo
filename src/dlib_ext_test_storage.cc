@@ -1,7 +1,9 @@
 #include "lib_c5t_dlib.h"
 #include "lib_c5t_storage.h"
+#include "lib_test_storage.h"  // IWYU pragma: keep
 #include "bricks/strings/join.h"
 
+extern "C" int Smoke42() { return 42; }
 extern "C" std::string SmokeOK() { return "OK"; }
 
 extern "C" std::string StorageFields(IDLib& iface) {
@@ -15,6 +17,16 @@ extern "C" std::string StorageFields(IDLib& iface) {
   return res;
 }
 
-extern "C" void AddK(IDLib& iface) {
-  iface.Use<IStorage>([](IStorage&) {});
+extern "C" void TestSet(IDLib& iface, std::string const& k, std::string const& v) {
+  iface.Use<IStorage>([&k, &v](IStorage& storage) {
+    C5T_STORAGE_INJECT(storage.Storage());
+    C5T_STORAGE(kv1).Set(k, v);
+  });
+}
+
+extern "C" void TestDel(IDLib& iface, std::string const& k) {
+  iface.Use<IStorage>([&k](IStorage& storage) {
+    C5T_STORAGE_INJECT(storage.Storage());
+    C5T_STORAGE(kv1).Del(k);
+  });
 }
