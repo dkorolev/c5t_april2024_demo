@@ -21,3 +21,5 @@ CURRENT_STRUCT(SomeJSON) {
 C5T_STORAGE_DECLARE_FIELD(kv1, std::string);
 C5T_STORAGE_DECLARE_FIELD(kv2, SomeJSON);
 C5T_STORAGE_DECLARE_FIELD(kv3, int32_t);
+
+void DefineTestStorageFields();

@@ -168,7 +168,7 @@ int main(int argc, char** argv) {
     C5T_DLIB_USE(
         name,
         [&r](C5T_DLib& dlib) {
-          auto const s = dlib.Call<std::string()>("foo");
+          auto const s = dlib.CallReturningOptional<std::string()>("foo");
           if (Exists(s)) {
             r("has foo(): " + Value(s) + '\n');
           } else {
@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
                     wa.MutableUse([&](State& state) { state.broadcasts.emplace_back(id, s); });
                     impl_msgreplier.pmsg = s;
                     C5T_DLIB_USE("msgreplier", [&impl_msgreplier](C5T_DLib& dlib) {
-                      dlib.Call<void(IDLib&)>("OnBroadcast", impl_msgreplier);
+                      dlib.CallVoid<void(IDLib&)>("OnBroadcast", impl_msgreplier);
                     });
                   }
                 }

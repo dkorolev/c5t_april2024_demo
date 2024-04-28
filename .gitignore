@@ -14,3 +14,7 @@ current/
 *.swp
 *.swo
 .exrc
+
+.idea/
+CMakeLists.txt.user
+cmake-build-*/

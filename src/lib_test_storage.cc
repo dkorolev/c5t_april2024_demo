@@ -3,6 +3,8 @@
 
 #include "typesystem/serialization/json.h"  // IWYU pragma: keep
 
-C5T_STORAGE_DEFINE_FIELD(kv1, std::string, PERSIST_LATEST);
-C5T_STORAGE_DEFINE_FIELD(kv2, SomeJSON, PERSIST_LATEST);
-C5T_STORAGE_DEFINE_FIELD(kv3, int32_t, DO_NOT_PERSIST);
+void DefineTestStorageFields() {
+  C5T_STORAGE_DEFINE_FIELD(kv1, std::string, PERSIST_LATEST);
+  C5T_STORAGE_DEFINE_FIELD(kv2, SomeJSON, PERSIST_LATEST);
+  C5T_STORAGE_DEFINE_FIELD(kv3, int32_t, DO_NOT_PERSIST);
+}

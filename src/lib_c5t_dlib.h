@@ -67,7 +67,7 @@ class C5T_DLib {
             typename... ARGS,
             typename T_RETVAL = std::invoke_result_t<F, ARGS...>,
             class = typename std::enable_if<!std::is_same_v<T_RETVAL, void>>::type>
-  Optional<T_RETVAL> Call(std::string const& fn_name, ARGS&&... args) {
+  Optional<T_RETVAL> CallReturningOptional(std::string const& fn_name, ARGS&&... args) {
     auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
     if (pf) {
       return (*pf)(std::forward<ARGS>(args)...);
@@ -80,10 +80,13 @@ class C5T_DLib {
             typename... ARGS,
             typename T_RETVAL = std::invoke_result_t<F, ARGS...>,
             class = typename std::enable_if<std::is_same_v<T_RETVAL, void>>::type>
-  void Call(std::string const& fn_name, ARGS&&... args) {
+  bool CallVoid(std::string const& fn_name, ARGS&&... args) {
     auto const pf = reinterpret_cast<F*>(GetRawPF(fn_name));
     if (pf) {
       (*pf)(std::forward<ARGS>(args)...);
+      return true;
+    } else {
+      return false;
     }
   }
 };
@@ -168,6 +171,21 @@ class C5T_DLibs_Manager_Interface {
   virtual C5T_DLIB_RELOAD_RESULT DoLoadOrReloadDLib(std::string const& name) = 0;
 };
 
+// The forward declaration and public interface to enable `C5T_STORAGE_INJECT`.
+// TODO: unify interace, namespace.
+// TODO: unify interace, inject macro.
+class C5T_STORAGE_Interface;
+
+class IStorage : public virtual IDLib {
+ private:
+  C5T_STORAGE_Interface& storage_;
+  IStorage() = delete;
+
+ public:
+  IStorage(C5T_STORAGE_Interface& storage) : storage_(storage) {}
+  C5T_STORAGE_Interface& Storage() { return storage_; }
+};
+
 // Initialize, tell the `DLIB` framework which dir to load dynamic libraries from.
 void C5T_DLIB_SET_BASE_DIR(std::string base_dir);
 
@@ -181,17 +199,26 @@ void C5T_DLIB_USE_PROVIDED_INSTANCE_AND_SET_BASE_DIR(C5T_DLibs_Manager_Interface
 void C5T_DLIB_LIST(std::function<void(std::string)>);
 
 // Use the `DLIB`, load it if needed, re-load it if needed.
-// TODO(dkorolev): DLib lifetime management, this is the next step.
 bool C5T_DLIB_USE(
     std::string const& lib_name, std::function<void(C5T_DLib&)>, std::function<void()> = [] {});
 
 // NOTE(dkorolev): Ugly, extra copy, but should do the job for now.
-template <class F, class G>
-std::invoke_result_t<F, C5T_DLib&> C5T_DLIB_CALL(std::string const& lib_name, F&& f, G&& g) {
+template <class F,
+          class G = std::function<std::invoke_result_t<F, C5T_DLib&>()>,
+          class = std::enable_if_t<!std::is_same_v<std::invoke_result_t<F, C5T_DLib&>, void>>>
+std::invoke_result_t<F, C5T_DLib&> C5T_DLIB_CALL(
+    std::string const& lib_name, F&& f, G&& g = []() -> std::invoke_result_t<F, C5T_DLib&> {
+      return std::invoke_result_t<F, C5T_DLib&>();
+    }) {
   std::invoke_result_t<F, C5T_DLib&> r;
   C5T_DLIB_USE(
       lib_name, [&](C5T_DLib& lib) { r = f(lib); }, [&]() { r = g(); });
   return r;
+}
+
+template <class F, class = std::enable_if_t<std::is_same_v<std::invoke_result_t<F, C5T_DLib&>, void>>>
+void C5T_DLIB_CALL(std::string const& lib_name, F&& f) {
+  C5T_DLIB_USE(lib_name, [&](C5T_DLib& lib) { f(lib); });
 }
 
 // Reloads the lib as needed, with the "symlink trick" so that the library is truly re-loaded.

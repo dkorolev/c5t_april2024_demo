@@ -27,7 +27,7 @@ void RegisterDemoRoutesDLib(std::string const& bin_path, HTTPServerContext& ctx)
     return C5T_DLIB_CALL(
         name,
         [](C5T_DLib& dlib) {
-          auto const s = dlib.Call<std::string()>("foo");
+          auto const s = dlib.CallReturningOptional<std::string()>("foo");
           if (Exists(s)) {
             return FastResponse().Body("has foo(): " + Value(s) + '\n');
           } else {
