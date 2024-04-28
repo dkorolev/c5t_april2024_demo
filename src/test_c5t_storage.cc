@@ -132,7 +132,7 @@ TEST(StorageTest, SmokeMapPersists) {
   }
 
   {
-    // Step 2/5: Restore from the persisted storage and delete the entry.
+    // Step 4/5: Restore from the persisted storage and delete the entry.
     auto const storage_scope4 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir1);
     // C5T_STORAGE_INJECT(storage_scope4);
     C5T_STORAGE(kv1).Del("k");
