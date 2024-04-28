@@ -32,6 +32,7 @@ class C5T_STORAGE_Interface {
   virtual C5T_STORAGE_Layer& StorageLayerForField(C5T_STORAGE_FIELD_Interface const&) = 0;
   virtual void DoSave(std::string const& field, std::string const& key, std::string const& value) = 0;
   virtual Optional<std::string> DoLoad(std::string const& field, std::string const& key) = 0;
+  virtual void DoDelete(std::string const& field, std::string const& key) = 0;
 };
 
 // Creates and registers the instance of storage to use.
@@ -90,7 +91,6 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
     }
 
     void InnerSet(std::string key, T const& value) const {
-      // TODO: better save? incl build time and moving the call to `JSON` our of the header file?
       impl.DoSave(self.name_, key, self.DoSerialize(value));
       rhs_t& p = self.contents_[key];
       p.first = true;
@@ -98,6 +98,13 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
         *p.second = value;
       } else {
         p.second = std::make_unique<T>(value);
+      }
+    }
+
+    void InnerDel(std::string const& key) const {
+      if (InnerGet(key)) {
+        self.contents_[key].second = nullptr;
+        impl.DoDelete(self.name_, key);
       }
     }
 
@@ -128,7 +135,7 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
       InnerSet(std::move(key), std::forward<TT>(value));
     }
 
-    // TODO: Del().
+    void Del(std::string const& key) { InnerDel(key); }
   };
 
   Wrapper operator()() { return Wrapper(*this, C5T_STORAGE_INSTANCE()); }

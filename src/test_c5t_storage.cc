@@ -110,7 +110,7 @@ TEST(StorageTest, SmokeMapPersists) {
   current::FileSystem::MkDir(dir1, current::FileSystem::MkDirParameters::Silent);
 
   {
-    // Step 1/3: Create something and have it persisted.
+    // Step 1/5: Create something and have it persisted.
     auto const storage_scope1 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir1);
     // C5T_STORAGE_INJECT(storage_scope1);
     EXPECT_FALSE(C5T_STORAGE(kv1).Has("k"));
@@ -118,16 +118,30 @@ TEST(StorageTest, SmokeMapPersists) {
   }
 
   {
-    // Step 2/3: Restore from the persisted storage
+    // Step 2/5: Restore from the persisted storage.
     auto const storage_scope2 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir1);
     // C5T_STORAGE_INJECT(storage_scope2);
     EXPECT_TRUE(C5T_STORAGE(kv1).Has("k"));
   }
 
   {
-    // Step 3/3: But confirm that the freshly created storage from a different dir is empty.
+    // Step 3/5: But confirm that the freshly created storage from a different dir is empty.
     auto const storage_scope3 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir2);
     // C5T_STORAGE_INJECT(storage_scope3);
+    EXPECT_FALSE(C5T_STORAGE(kv1).Has("k"));
+  }
+
+  {
+    // Step 2/5: Restore from the persisted storage and delete the entry.
+    auto const storage_scope4 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir1);
+    // C5T_STORAGE_INJECT(storage_scope4);
+    C5T_STORAGE(kv1).Del("k");
+  }
+
+  {
+    // Step 5/5: Restore from the persisted storage.
+    auto const storage_scope5 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir1);
+    // C5T_STORAGE_INJECT(storage_scope5);
     EXPECT_FALSE(C5T_STORAGE(kv1).Has("k"));
   }
 }
@@ -139,4 +153,5 @@ TEST(StorageTest, SmokeMapPersists) {
 // [ ] persist move old files around, to not scan through them unnecesarily
 // [ ] persist evolve, use `JSONFormat::Minimalistic`
 // [ ] persist set logger and errors on failing to evolve
+// [x] delete
 // [ ] injected storage
