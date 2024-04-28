@@ -37,8 +37,8 @@ TEST(DLibTest, Test1_Smoke) {
       "test1", [&](C5T_DLib& dlib) { return dlib.CallReturningOptional<std::string()>("NoSuchFunction"); });
   ASSERT_FALSE(Exists(s2));
 
-  Optional<std::string> const s3 =
-      C5T_DLIB_CALL("no_such_lib", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<std::string()>("ShouldReturnOK"); });
+  Optional<std::string> const s3 = C5T_DLIB_CALL(
+      "no_such_lib", [&](C5T_DLib& dlib) { return dlib.CallReturningOptional<std::string()>("ShouldReturnOK"); });
   ASSERT_FALSE(Exists(s3));
 
   std::string const s4 = C5T_DLIB_CALL(
