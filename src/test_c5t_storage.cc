@@ -135,7 +135,7 @@ TEST(StorageTest, SmokeMapPersists) {
 // TO TEST:
 // [x] do not use the global storage singleton, inject one per test
 // [x] persist restore trivial
-// [ ] persist restore recovering
+// [x] persist restore recovering
 // [ ] persist move old files around, to not scan through them unnecesarily
 // [ ] persist evolve, use `JSONFormat::Minimalistic`
 // [ ] persist set logger and errors on failing to evolve
