@@ -19,13 +19,6 @@ struct StorageKeyNotFoundException final : current::Exception {};
 struct StorageNotInitializedException final : current::Exception {};
 struct StorageInternalErrorException final : current::Exception {};
 
-// TODO: rethink passing by value to move vs. by reference
-// TODO: do we even need this one?
-struct C5T_STORAGE_Layer {
-  bool initialized = false;
-};
-
-// TODO: unsure of this is needed at all
 class C5T_STORAGE_FIELD_Interface {
  protected:
   C5T_STORAGE_FIELD_Interface() = default;
@@ -46,7 +39,7 @@ class C5T_STORAGE_FIELD_Interface {
 class C5T_STORAGE_Interface {
  public:
   virtual ~C5T_STORAGE_Interface() = default;
-  virtual C5T_STORAGE_Layer& StorageLayerForField(C5T_STORAGE_FIELD_Interface const&) = 0;
+  virtual bool NeedToStartFresh(C5T_STORAGE_FIELD_Interface const&) = 0;
 
   // Stateless, effectively static, inner methods.
   virtual size_t FieldsCount() const = 0;
@@ -148,10 +141,8 @@ class C5T_STORAGE_FIELD_ACCESSOR final {
       : self(self),
         contents(*reinterpret_cast<typename C5T_STORAGE_FIELD_TYPES<T>::map_t*>(self.GetMapAsVoidPtr(self))),
         impl(impl) {
-    C5T_STORAGE_Layer& p = impl.StorageLayerForField(self);
-    if (!p.initialized) {
+    if (impl.NeedToStartFresh(self)) {
       contents.clear();
-      p.initialized = true;
     }
   }
 
