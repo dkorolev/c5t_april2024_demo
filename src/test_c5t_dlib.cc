@@ -32,6 +32,26 @@ TEST(DLibTest, Test1_Smoke) {
   C5T_DLIB_USE("test1", [&](C5T_DLib& dlib) { s = dlib.Call<std::string()>("ShouldReturnOK"); });
   ASSERT_TRUE(Exists(s));
   EXPECT_EQ("OK", Value(s));
+
+  Optional<std::string> const s1 =
+      C5T_DLIB_CALL("test1", [&](C5T_DLib& dlib) { return dlib.Call<std::string()>("ShouldReturnOK"); });
+  ASSERT_TRUE(Exists(s1));
+  EXPECT_EQ("OK", Value(s1));
+
+  Optional<std::string> const s2 =
+      C5T_DLIB_CALL("test1", [&](C5T_DLib& dlib) { return dlib.Call<std::string()>("NoSuchFunction"); });
+  ASSERT_FALSE(Exists(s2));
+
+  Optional<std::string> const s3 =
+      C5T_DLIB_CALL("no_such_lib", [&](C5T_DLib& dlib) { return dlib.Call<std::string()>("ShouldReturnOK"); });
+  ASSERT_FALSE(Exists(s3));
+
+  Optional<std::string> const s4 = C5T_DLIB_CALL(
+      "no_such_lib",
+      [&](C5T_DLib& dlib) { return dlib.Call<std::string()>("ShouldReturnOK"); },
+      []() { return Optional<std::string>("HA!"); });
+  ASSERT_TRUE(Exists(s4));
+  EXPECT_EQ("HA!", Value(s4));
 }
 
 TEST(DLibTest, Test2_UseInterface_WithoutFoo) {

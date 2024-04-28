@@ -5,6 +5,7 @@
 #include "bricks/strings/join.h"
 #include "bricks/time/chrono.h"
 
+#include "lib_c5t_dlib.h"
 #include "lib_c5t_storage.h"
 #include "lib_test_storage.h"
 
@@ -31,6 +32,24 @@ struct TestStorageDir final {
     std::string const dir = *__FILE__ == current::FileSystem::GetPathSeparator() ? "/" + res : res;
     current::FileSystem::MkDir(dir, current::FileSystem::MkDirParameters::Silent);
     return dir;
+  }
+};
+
+struct InitDLibOnce final {
+  InitDLibOnce() {
+    std::string const bin_path = []() {
+      // NOTE(dkorolev): I didn't find a quick way to get current binary dir and/or argv[0] from under `googletest`.
+      std::vector<std::string> path = current::strings::Split(__FILE__, current::FileSystem::GetPathSeparator());
+      path.pop_back();
+#ifdef NDEBUG
+      path.back() = ".current";
+#else
+      path.back() = ".current_debug";
+#endif
+      std::string const res = current::strings::Join(path, current::FileSystem::GetPathSeparator());
+      return *__FILE__ == current::FileSystem::GetPathSeparator() ? "/" + res : res;
+    }();
+    C5T_DLIB_SET_BASE_DIR(bin_path);
   }
 };
 
@@ -144,6 +163,22 @@ TEST(StorageTest, SmokeMapPersists) {
     // C5T_STORAGE_INJECT(storage_scope5);
     EXPECT_FALSE(C5T_STORAGE(kv1).Has("k"));
   }
+}
+
+TEST(StorageTest, InjectedFromDLib) {
+  current::Singleton<InitDLibOnce>();
+
+  Optional<std::string> const smoke =
+      C5T_DLIB_CALL("test_storage", [&](C5T_DLib& dlib) { return dlib.Call<std::string()>("SmokeOK"); });
+
+  EXPECT_TRUE(Exists(smoke));
+  EXPECT_EQ("OK", Value(smoke));
+
+  auto const dir = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName();
+  current::FileSystem::MkDir(dir, current::FileSystem::MkDirParameters::Silent);
+  auto const storage_scope = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir);
+
+  // ... EXPECT_FALSE(C5T_STORAGE(kv1).Has("k")); ...
 }
 
 // TO TEST:
