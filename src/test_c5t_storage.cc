@@ -178,6 +178,14 @@ TEST(StorageTest, InjectedFromDLib) {
   current::FileSystem::MkDir(dir, current::FileSystem::MkDirParameters::Silent);
   auto const storage_scope = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir);
 
+  IStorage istorage(C5T_STORAGE_INSTANCE());
+
+  Optional<std::string> const storage_fields = C5T_DLIB_CALL(
+      "test_storage", [&](C5T_DLib& dlib) { return dlib.Call<std::string(IDLib&)>("StorageFields", istorage); });
+
+  EXPECT_TRUE(Exists(storage_fields));
+  EXPECT_EQ("kv1,kv2,kv3", Value(storage_fields));
+
   // ... EXPECT_FALSE(C5T_STORAGE(kv1).Has("k")); ...
 }
 

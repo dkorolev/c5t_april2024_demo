@@ -24,7 +24,8 @@ struct C5T_STORAGE_FIELD_Interface {
 };
 
 // TODO: syntax
-void _C5T_STORAGE_DeclareField(C5T_STORAGE_FIELD_Interface*, std::string const&);
+// TODO: should only need to _declare_ fields to use them from a `dlib`!
+extern "C" void _C5T_STORAGE_DeclareField(C5T_STORAGE_FIELD_Interface*, std::string const&);
 
 class C5T_STORAGE_Interface {
  public:

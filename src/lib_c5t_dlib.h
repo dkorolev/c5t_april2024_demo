@@ -168,6 +168,21 @@ class C5T_DLibs_Manager_Interface {
   virtual C5T_DLIB_RELOAD_RESULT DoLoadOrReloadDLib(std::string const& name) = 0;
 };
 
+// The forward declaration and public interface to enable `C5T_STORAGE_INJECT`.
+// TODO: unify interace, namespace.
+// TODO: unify interace, inject macro.
+class C5T_STORAGE_Interface;
+
+class IStorage : public virtual IDLib {
+ private:
+  C5T_STORAGE_Interface& storage_;
+  IStorage() = delete;
+
+ public:
+  IStorage(C5T_STORAGE_Interface& storage) : storage_(storage) {}
+  C5T_STORAGE_Interface& Storage() { return storage_; }
+};
+
 // Initialize, tell the `DLIB` framework which dir to load dynamic libraries from.
 void C5T_DLIB_SET_BASE_DIR(std::string base_dir);
 
