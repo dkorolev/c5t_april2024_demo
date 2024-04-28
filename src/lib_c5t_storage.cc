@@ -14,7 +14,6 @@ static inline std::string kStorageTombstone = "-\n";
 
 struct C5T_Storage_Fields_Singleton final {
   C5T_STORAGE_Interface* pimpl = nullptr;
-  std::set<std::string> fields;
 };
 
 C5T_STORAGE_Interface& C5T_STORAGE_INSTANCE() {
@@ -23,16 +22,6 @@ C5T_STORAGE_Interface& C5T_STORAGE_INSTANCE() {
     throw StorageNotInitializedException();
   } else {
     return *s.pimpl;
-  }
-}
-
-void _C5T_STORAGE_DeclareField(C5T_STORAGE_FIELD_Interface*, std::string const& name) {
-  current::Singleton<C5T_Storage_Fields_Singleton>().fields.insert(name);
-}
-
-void C5T_STORAGE_LIST_FIELDS(std::function<void(std::string const&)> cb) {
-  for (auto const& f : current::Singleton<C5T_Storage_Fields_Singleton>().fields) {
-    cb(f);
   }
 }
 

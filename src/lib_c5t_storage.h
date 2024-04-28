@@ -25,7 +25,7 @@ class C5T_STORAGE_FIELD_Interface {
  public:
   ~C5T_STORAGE_FIELD_Interface() = default;
 
-  virtual std::string const& Name() = 0;
+  virtual std::string const& Name() const = 0;
 
   // `void*` is `T*`.
   virtual std::string DoSerializeImpl(void const*) const = 0;
@@ -34,10 +34,6 @@ class C5T_STORAGE_FIELD_Interface {
   // TODO: move this into the storage layer?
   virtual void* GetMapAsVoidPtr(C5T_STORAGE_FIELD_Interface const&) = 0;
 };
-
-// TODO: syntax
-// TODO: should only need to _declare_ fields to use them from a `dlib`!
-extern "C" void _C5T_STORAGE_DeclareField(C5T_STORAGE_FIELD_Interface*, std::string const&);
 
 class C5T_STORAGE_Interface {
  public:
@@ -49,6 +45,29 @@ class C5T_STORAGE_Interface {
   virtual Optional<std::string> DoLoad(std::string const& field, std::string const& key) = 0;
   virtual void DoDelete(std::string const& field, std::string const& key) = 0;
 };
+
+class C5T_STORAGE_META_SINGLETON_Impl {
+ private:
+  std::set<std::string> field_names;
+
+ public:
+  virtual void DeclareField(C5T_STORAGE_FIELD_Interface const* f) { field_names.insert(f->Name()); }
+
+  void ListFields(std::function<void(std::string const&)> cb) {
+    for (auto const& f : field_names) {
+      cb(f);
+    }
+  }
+};
+
+inline C5T_STORAGE_META_SINGLETON_Impl& C5T_STORAGE_META_SINGLETON() {
+  static C5T_STORAGE_META_SINGLETON_Impl impl;
+  return impl;
+}
+
+inline void C5T_STORAGE_LIST_FIELDS(std::function<void(std::string const&)> cb) {
+  C5T_STORAGE_META_SINGLETON().ListFields(std::move(cb));
+}
 
 // Creates and registers the instance of storage to use.
 std::unique_ptr<C5T_STORAGE_Interface> C5T_STORAGE_CREATE_UNIQUE_INSANCE(std::string const& path);
@@ -165,9 +184,9 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
   mutable typename C5T_STORAGE_FIELD_TYPES<T>::map_t contents_;
 
  protected:
-  C5T_STORAGE_FIELD(char const* name) : name_(name) { _C5T_STORAGE_DeclareField(this, name_); }
+  C5T_STORAGE_FIELD(char const* name) : name_(name) { C5T_STORAGE_META_SINGLETON().DeclareField(this); }
 
-  std::string const& Name() override { return name_; }
+  std::string const& Name() const override { return name_; }
   void* GetMapAsVoidPtr(C5T_STORAGE_FIELD_Interface const&) override { return &contents_; }
 
  public:
@@ -214,8 +233,3 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
 
 // To use an externally-provided storage, mostly for the tests and from within `dlib`-s.
 #define C5T_STORAGE_INJECT(x)
-
-// TODO: IStorage
-
-// To list the fields.
-void C5T_STORAGE_LIST_FIELDS(std::function<void(std::string const&)>);
