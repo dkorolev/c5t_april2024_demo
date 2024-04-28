@@ -28,30 +28,24 @@ struct InitDLibOnce final {
 
 TEST(DLibTest, Test1_Smoke) {
   current::Singleton<InitDLibOnce>();
-  Optional<std::string> s;
-  C5T_DLIB_USE("test1", [&](C5T_DLib& dlib) { s = dlib.Call<std::string()>("ShouldReturnOK"); });
-  ASSERT_TRUE(Exists(s));
-  EXPECT_EQ("OK", Value(s));
 
-  Optional<std::string> const s1 =
-      C5T_DLIB_CALL("test1", [&](C5T_DLib& dlib) { return dlib.Call<std::string()>("ShouldReturnOK"); });
-  ASSERT_TRUE(Exists(s1));
-  EXPECT_EQ("OK", Value(s1));
+  std::string const s1 =
+      C5T_DLIB_CALL("test1", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<std::string()>("ShouldReturnOK"); });
+  EXPECT_EQ("OK", s1);
 
   Optional<std::string> const s2 =
-      C5T_DLIB_CALL("test1", [&](C5T_DLib& dlib) { return dlib.Call<std::string()>("NoSuchFunction"); });
+      C5T_DLIB_CALL("test1", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<std::string()>("NoSuchFunction"); });
   ASSERT_FALSE(Exists(s2));
 
   Optional<std::string> const s3 =
-      C5T_DLIB_CALL("no_such_lib", [&](C5T_DLib& dlib) { return dlib.Call<std::string()>("ShouldReturnOK"); });
+      C5T_DLIB_CALL("no_such_lib", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<std::string()>("ShouldReturnOK"); });
   ASSERT_FALSE(Exists(s3));
 
-  Optional<std::string> const s4 = C5T_DLIB_CALL(
+  std::string const s4 = C5T_DLIB_CALL(
       "no_such_lib",
-      [&](C5T_DLib& dlib) { return dlib.Call<std::string()>("ShouldReturnOK"); },
-      []() { return Optional<std::string>("HA!"); });
-  ASSERT_TRUE(Exists(s4));
-  EXPECT_EQ("HA!", Value(s4));
+      [&](C5T_DLib& dlib) { return dlib.CallOrDefault<std::string()>("ShouldReturnOK"); },
+      []() { return "HA!"; });
+  EXPECT_EQ("HA!", s4);
 }
 
 TEST(DLibTest, Test2_UseInterface_WithoutFoo) {
@@ -63,7 +57,7 @@ TEST(DLibTest, Test2_UseInterface_WithoutFoo) {
 
   current::Singleton<InitDLibOnce>();
   EXPECT_EQ("", impl.bar);
-  C5T_DLIB_USE("test2", [&](C5T_DLib& dlib) { dlib.Call<void(IDLib&)>("UsesIFooBar", impl); });
+  ASSERT_TRUE(C5T_DLIB_CALL("test2", [&](C5T_DLib& dlib) { return dlib.CallVoid<void(IDLib&)>("UsesIFooBar", impl); }));
   EXPECT_EQ("PASS BAR, FOO UNAVAILABLE", impl.bar);
 }
 
@@ -83,10 +77,10 @@ TEST(DLibTest, Test2_UseInterface_WithFoo) {
   current::Singleton<InitDLibOnce>();
   EXPECT_EQ("", impl.foo);
   EXPECT_EQ("", impl.bar);
-  C5T_DLIB_USE("test2", [&](C5T_DLib& dlib) { dlib.Call<void(IDLib&)>("UsesIFooBar", impl); });
+  ASSERT_TRUE(C5T_DLIB_USE("test2", [&](C5T_DLib& dlib) { dlib.CallVoid<void(IDLib&)>("UsesIFooBar", impl); }));
   EXPECT_EQ("PASS FOO", impl.foo);
   EXPECT_EQ("PASS BAR, FOO=42", impl.bar);
-  C5T_DLIB_USE("test2", [&](C5T_DLib& dlib) { dlib.Call<void(IDLib&)>("UsesIFooBar", impl); });
+  ASSERT_TRUE(C5T_DLIB_USE("test2", [&](C5T_DLib& dlib) { dlib.CallVoid<void(IDLib&)>("UsesIFooBar", impl); }));
   EXPECT_EQ("PASS FOO", impl.foo);
   EXPECT_EQ("PASS BAR, FOO=43", impl.bar);
 }

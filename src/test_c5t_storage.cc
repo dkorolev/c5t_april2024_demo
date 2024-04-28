@@ -167,15 +167,15 @@ TEST(StorageTest, SmokeMapPersists) {
 TEST(StorageTest, InjectedFromDLib) {
   current::Singleton<InitDLibOnce>();
 
-  Optional<int> const smoke_42 =
-      C5T_DLIB_CALL("test_storage", [&](C5T_DLib& dlib) { return dlib.Call<int()>("Smoke42"); });
-  ASSERT_TRUE(Exists(smoke_42));
-  EXPECT_EQ(42, Value(smoke_42));
+  EXPECT_EQ(42, C5T_DLIB_CALL("test_storage", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<int()>("Smoke42"); }));
+  EXPECT_EQ(0, C5T_DLIB_CALL("test_storage", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<int()>("NonExistent"); }));
 
-  Optional<std::string> const smoke_ok =
-      C5T_DLIB_CALL("test_storage", [&](C5T_DLib& dlib) { return dlib.Call<std::string()>("SmokeOK"); });
-  ASSERT_TRUE(Exists(smoke_ok));
-  EXPECT_EQ("OK", Value(smoke_ok));
+  EXPECT_EQ("OK", C5T_DLIB_CALL("test_storage", [&](C5T_DLib& dlib) {
+              return dlib.CallOrDefault<std::string()>("SmokeOK");
+            }));
+  EXPECT_EQ("", C5T_DLIB_CALL("test_storage", [&](C5T_DLib& dlib) {
+              return dlib.CallOrDefault<std::string()>("NonExistent");
+            }));
 
   auto const dir = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName();
   current::FileSystem::MkDir(dir, current::FileSystem::MkDirParameters::Silent);
@@ -183,8 +183,9 @@ TEST(StorageTest, InjectedFromDLib) {
 
   IStorage istorage(C5T_STORAGE_INSTANCE());
 
-  Optional<std::string> const storage_fields = C5T_DLIB_CALL(
-      "test_storage", [&](C5T_DLib& dlib) { return dlib.Call<std::string(IDLib&)>("StorageFields", istorage); });
+  Optional<std::string> const storage_fields = C5T_DLIB_CALL("test_storage", [&](C5T_DLib& dlib) {
+    return dlib.CallReturningOptional<std::string(IDLib&)>("StorageFields", istorage);
+  });
 
   EXPECT_TRUE(Exists(storage_fields));
   EXPECT_EQ("kv1,kv2,kv3", Value(storage_fields));
@@ -192,25 +193,22 @@ TEST(StorageTest, InjectedFromDLib) {
   EXPECT_FALSE(C5T_STORAGE(kv1).Has("k"));
   ASSERT_THROW(C5T_STORAGE(kv1).GetOrThrow("k"), StorageKeyNotFoundException);
 
-  C5T_DLIB_USE("test_storage", [&](C5T_DLib& dlib) {
-    dlib.Call<void(IDLib&, std::string const& key, std::string const& value)>(
-        "TestSet", istorage, "k", "v1");
+  C5T_DLIB_CALL("test_storage", [&](C5T_DLib& dlib) {
+    dlib.CallVoid<void(IDLib&, std::string const& key, std::string const& value)>("TestSet", istorage, "k", "v1");
   });
 
   EXPECT_TRUE(C5T_STORAGE(kv1).Has("k"));
   EXPECT_EQ("v1", C5T_STORAGE(kv1).GetOrThrow("k"));
 
   C5T_DLIB_USE("test_storage", [&](C5T_DLib& dlib) {
-    dlib.Call<void(IDLib&, std::string const& key, std::string const& value)>(
-        "TestSet", istorage, "k", "v2");
+    dlib.CallVoid<void(IDLib&, std::string const& key, std::string const& value)>("TestSet", istorage, "k", "v2");
   });
 
   EXPECT_TRUE(C5T_STORAGE(kv1).Has("k"));
   EXPECT_EQ("v2", C5T_STORAGE(kv1).GetOrThrow("k"));
 
-  C5T_DLIB_USE("test_storage", [&](C5T_DLib& dlib) {
-    dlib.Call<void(IDLib&, std::string const& key)>("TestDel", istorage, "k");
-  });
+  C5T_DLIB_USE("test_storage",
+               [&](C5T_DLib& dlib) { dlib.CallVoid<void(IDLib&, std::string const& key)>("TestDel", istorage, "k"); });
 
   EXPECT_FALSE(C5T_STORAGE(kv1).Has("k"));
   ASSERT_THROW(C5T_STORAGE(kv1).GetOrThrow("k"), StorageKeyNotFoundException);
