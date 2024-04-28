@@ -51,7 +51,7 @@ TEST(StorageTest, SmokeNeedStorage) {
 TEST(StorageTest, SmokeMapStringString) {
   auto const dir = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName();
   auto const storage_scope = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir);
-  C5T_STORAGE_INJECT(storage_scope);
+  // C5T_STORAGE_INJECT(storage_scope);
 
   {
     ASSERT_FALSE(C5T_STORAGE(kv1).Has("k"));
@@ -112,7 +112,7 @@ TEST(StorageTest, SmokeMapPersists) {
   {
     // Step 1/3: Create something and have it persisted.
     auto const storage_scope1 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir1);
-    C5T_STORAGE_INJECT(storage_scope1);
+    // C5T_STORAGE_INJECT(storage_scope1);
     EXPECT_FALSE(C5T_STORAGE(kv1).Has("k"));
     C5T_STORAGE(kv1).Set("k", "v");
   }
@@ -120,14 +120,14 @@ TEST(StorageTest, SmokeMapPersists) {
   {
     // Step 2/3: Restore from the persisted storage
     auto const storage_scope2 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir1);
-    C5T_STORAGE_INJECT(storage_scope2);
+    // C5T_STORAGE_INJECT(storage_scope2);
     EXPECT_TRUE(C5T_STORAGE(kv1).Has("k"));
   }
 
   {
     // Step 3/3: But confirm that the freshly created storage from a different dir is empty.
-    auto const storage_scope2 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir2);
-    C5T_STORAGE_INJECT(storage_scope3);
+    auto const storage_scope3 = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir2);
+    // C5T_STORAGE_INJECT(storage_scope3);
     EXPECT_FALSE(C5T_STORAGE(kv1).Has("k"));
   }
 }
