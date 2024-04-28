@@ -56,12 +56,17 @@ class C5T_STORAGE_Interface {
 class C5T_STORAGE_META_SINGLETON_Impl final {
  private:
   std::vector<C5T_STORAGE_FIELD_Interface*> fields;
-  // std::set<std::string> field_names;
+  std::set<std::string> field_names;
 
  public:
   void DeclareField(C5T_STORAGE_FIELD_Interface* f) {
+    std::string name = f->Name();
+    if (field_names.count(name)) {
+      std::cerr << "FATAL: DeclareField('" << name << "') called more than once." << std::endl;
+      ::abort();
+    }
+    field_names.insert(f->Name());
     fields.push_back(f);
-    //    field_names.insert(f->Name());
   }
 
   void VisitAllFields(std::function<void(C5T_STORAGE_FIELD_Interface*)> cb) {
@@ -204,31 +209,31 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
 
 // TODO: evolve
 
-#define C5T_STORAGE_DECLARE_FIELD(name, type)                             \
-  class C5T_STORAGE_FIELD_##name final : public C5T_STORAGE_FIELD<type> { \
-   protected:                                                             \
-    std::string DoSerializeImpl(void const*) const override;              \
-    bool DoDeserializeImpl(std::string const&, void*) const override;     \
-                                                                          \
-   public:                                                                \
-    using type_t = type;                                                  \
-    C5T_STORAGE_FIELD_##name() : C5T_STORAGE_FIELD(#name) {}              \
-  };                                                                      \
-  static C5T_STORAGE_FIELD_##name C5T_STORAGE_FIELD_INSTANCE_##name
+#define C5T_STORAGE_DECLARE_FIELD(name, T) using C5T_STORAGE_TYPE_##name = T
 
-// NOTE: For `C5T_STORAGE_DEFINE_FIELD` and for `C5T_STORAGE_FIELD`, JSON & serialization need to be `#include`-d.
-#define C5T_STORAGE_DEFINE_FIELD(name, type, meta)                                        \
-  std::string C5T_STORAGE_FIELD_##name::DoSerializeImpl(void const* p) const {            \
-    return JSON<JSONFormat::Minimalistic>(*reinterpret_cast<type const*>(p));             \
-  }                                                                                       \
-  bool C5T_STORAGE_FIELD_##name::DoDeserializeImpl(std::string const& s, void* p) const { \
-    try {                                                                                 \
-      ParseJSON<type, JSONFormat::Minimalistic>(s, *reinterpret_cast<type*>(p));          \
-      return true;                                                                        \
-    } catch (current::Exception const&) {                                                 \
-      return false;                                                                       \
-    }                                                                                     \
-  }
+// NOTE: This should be "called" from some "singleton function", not defined at global scope.
+// TODO: There may be a cleaner way, but not now.
+#define C5T_STORAGE_DEFINE_FIELD(name, T, meta)                                \
+  ([]() {                                                                      \
+    class C5T_STORAGE_FIELD_##name final : public C5T_STORAGE_FIELD<T> {       \
+     protected:                                                                \
+      std::string DoSerializeImpl(void const* p) const {                       \
+        return JSON<JSONFormat::Minimalistic>(*reinterpret_cast<T const*>(p)); \
+      }                                                                        \
+      bool DoDeserializeImpl(std::string const& s, void* p) const {            \
+        try {                                                                  \
+          ParseJSON<T, JSONFormat::Minimalistic>(s, *reinterpret_cast<T*>(p)); \
+          return true;                                                         \
+        } catch (current::Exception const&) {                                  \
+          return false;                                                        \
+        }                                                                      \
+      }                                                                        \
+                                                                               \
+     public:                                                                   \
+      C5T_STORAGE_FIELD_##name() : C5T_STORAGE_FIELD(#name) {}                 \
+    };                                                                         \
+    static C5T_STORAGE_FIELD_##name C5T_STORAGE_FIELD_INSTANCE_##name;         \
+  })()
 
 // TODO: rename
 struct C5T_Storage_Fields_Singleton final {
@@ -273,4 +278,4 @@ C5T_STORAGE_FIELD_ACCESSOR<T> C5T_STORAGE_USE_FIELD(std::string const& name) {
   return C5T_STORAGE_FIELD_ACCESSOR<T>(*pimpl_typed, storage);
 }
 
-#define C5T_STORAGE(name) C5T_STORAGE_USE_FIELD<typename C5T_STORAGE_FIELD_##name::type_t>(#name)
+#define C5T_STORAGE(name) C5T_STORAGE_USE_FIELD<C5T_STORAGE_TYPE_##name>(#name)

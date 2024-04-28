@@ -9,6 +9,11 @@
 #include "lib_c5t_storage.h"
 #include "lib_test_storage.h"
 
+struct CallDefineTestStorageFields final {
+  CallDefineTestStorageFields() { DefineTestStorageFields(); }
+};
+CallDefineTestStorageFields CallDefineTestStorageFields_impl;
+
 inline std::string CurrentTestName() { return ::testing::UnitTest::GetInstance()->current_test_info()->name(); }
 
 struct TestStorageDir final {
