@@ -17,6 +17,7 @@
 
 struct StorageKeyNotFoundException final : current::Exception {};
 struct StorageNotInitializedException final : current::Exception {};
+struct StorageFieldDeclaredAndNotDefinedException final : current::Exception {};
 struct StorageInternalErrorException final : current::Exception {};
 
 class C5T_STORAGE_FIELD_Interface {
@@ -269,7 +270,7 @@ C5T_STORAGE_FIELD_ACCESSOR<T> C5T_STORAGE_USE_FIELD(std::string const& name) {
   auto& storage = C5T_STORAGE_INSTANCE();
   C5T_STORAGE_FIELD_Interface* pimpl = storage.UseFieldTypeErased(name);
   if (!pimpl) {
-    throw StorageInternalErrorException();
+    throw StorageFieldDeclaredAndNotDefinedException();
   }
   auto pimpl_typed = dynamic_cast<C5T_STORAGE_FIELD<T>*>(pimpl);
   if (!pimpl_typed) {
