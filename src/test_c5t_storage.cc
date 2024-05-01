@@ -65,14 +65,14 @@ TEST(StorageTest, FieldsList) {
   EXPECT_EQ("kv1,kv2,kv3", current::strings::Join(v, ','));
 }
 
-TEST(StorageTest, SmokeNeedStorage) {
+TEST(StorageTest, NeedsStorage) {
   ASSERT_THROW(C5T_STORAGE(kv1), StorageNotInitializedException);
   ASSERT_THROW(C5T_STORAGE(kv1).Has("nope"), StorageNotInitializedException);
   auto const storage_scope = C5T_STORAGE_CREATE_UNIQUE_INSANCE(current::Singleton<TestStorageDir>().dir);
   EXPECT_FALSE(C5T_STORAGE(kv1).Has("nope"));
 }
 
-TEST(StorageTest, SmokeMapStringString) {
+TEST(StorageTest, MapStringString) {
   auto const dir = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName();
   auto const storage_scope = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir);
 
@@ -94,7 +94,7 @@ TEST(StorageTest, SmokeMapStringString) {
   }
 }
 
-TEST(StorageTest, SmokeMapStringObject) {
+TEST(StorageTest, MapStringObject) {
   auto const dir = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName();
   auto const storage_scope = C5T_STORAGE_CREATE_UNIQUE_INSANCE(dir);
 
@@ -127,7 +127,7 @@ TEST(StorageTest, SmokeMapStringObject) {
   }
 }
 
-TEST(StorageTest, SmokeMapPersists) {
+TEST(StorageTest, MapPersists) {
   auto const dir1 = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName() + '1';
   auto const dir2 = current::Singleton<TestStorageDir>().dir + '/' + CurrentTestName() + '2';
   current::FileSystem::MkDir(dir1, current::FileSystem::MkDirParameters::Silent);
@@ -212,6 +212,14 @@ TEST(StorageTest, InjectedFromDLib) {
 
   EXPECT_FALSE(C5T_STORAGE(kv1).Has("k"));
   ASSERT_THROW(C5T_STORAGE(kv1).GetOrThrow("k"), StorageKeyNotFoundException);
+}
+
+TEST(StorageTest, ThrowsOnDeclaredAndNotDefinedField) {
+  ASSERT_THROW(C5T_STORAGE(kv_declared_but_not_defined), StorageNotInitializedException);
+  ASSERT_THROW(C5T_STORAGE(kv_declared_but_not_defined).Has("nope"), StorageNotInitializedException);
+  auto const storage_scope = C5T_STORAGE_CREATE_UNIQUE_INSANCE(current::Singleton<TestStorageDir>().dir);
+  ASSERT_THROW(C5T_STORAGE(kv_declared_but_not_defined), StorageFieldDeclaredAndNotDefinedException);
+  ASSERT_THROW(C5T_STORAGE(kv_declared_but_not_defined).Has("nope"), StorageFieldDeclaredAndNotDefinedException);
 }
 
 // TO TEST:

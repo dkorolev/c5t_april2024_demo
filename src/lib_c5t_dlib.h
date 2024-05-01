@@ -186,6 +186,21 @@ class IStorage : public virtual IDLib {
   C5T_STORAGE_Interface& Storage() { return storage_; }
 };
 
+// The forward declaration and public interface to enable `C5T_ACTOR_MODEL_INJECT`.
+// TODO: unify interace, namespace.
+// TODO: unify interace, inject macro.
+class C5T_ACTOR_MODEL_Interface;
+
+class IActorModel : public virtual IDLib {
+ private:
+  C5T_ACTOR_MODEL_Interface& actor_model_;
+  IActorModel() = delete;
+
+ public:
+  IActorModel(C5T_ACTOR_MODEL_Interface& storage) : actor_model_(storage) {}
+  C5T_ACTOR_MODEL_Interface& ActorModel() { return actor_model_; }
+};
+
 // Initialize, tell the `DLIB` framework which dir to load dynamic libraries from.
 void C5T_DLIB_SET_BASE_DIR(std::string base_dir);
 

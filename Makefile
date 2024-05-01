@@ -45,7 +45,7 @@ debug_dir: ${DEBUG_BUILD_DIR} .gitignore
 	@grep "^${DEBUG_BUILD_DIR}/$$" .gitignore >/dev/null || echo "${DEBUG_BUILD_DIR}/" >>.gitignore
 
 ${DEBUG_BUILD_DIR}: CMakeLists.txt src
-	@C5T_DEPS="${C5T_DEPS}" cmake -B "${DEBUG_BUILD_DIR}" .
+	@C5T_DEPS="${C5T_DEPS}" cmake -DCMAKE_BUILD_TYPE=Debug -B "${DEBUG_BUILD_DIR}" .
 
 debug_test: debug
 	@(cd "${DEBUG_BUILD_DIR}"; make test)
