@@ -48,7 +48,7 @@ ${DEBUG_BUILD_DIR}: CMakeLists.txt src
 	@C5T_DEPS="${C5T_DEPS}" cmake -B "${DEBUG_BUILD_DIR}" .
 
 debug_test: debug
-	@(cd "${DEBUG_BUILD_DIR}"; make test)
+	@(cd "${DEBUG_BUILD_DIR}"; make test) || (cat .current_debug/Testing/Temporary/LastTest.log; exit 1)
 
 test: release_test
 
