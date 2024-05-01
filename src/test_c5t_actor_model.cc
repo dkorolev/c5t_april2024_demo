@@ -43,10 +43,17 @@ TODOs;
   - add some DEBUG WAIT FOR ALL QUEUES TO COMPLETE!
 */
 
+#define C5T_ACTOR_MODEL_ENABLE_TESTING
+
 #include <gtest/gtest.h>
 
-#include "lib_c5t_lifetime_manager.h"
 #include "lib_c5t_actor_model.h"
+#include "lib_c5t_dlib.h"
+#include "lib_c5t_lifetime_manager.h"
+
+#include "bricks/file/file.h"
+#include "bricks/strings/split.h"
+#include "bricks/strings/join.h"
 
 struct InitLifetimeManager final {
   InitLifetimeManager() {
@@ -54,6 +61,25 @@ struct InitLifetimeManager final {
   }
 };
 InitLifetimeManager InitLifetimeManager_impl;
+
+struct InitDLibOnce final {
+  InitDLibOnce() {
+    std::string const bin_path = []() {
+      // NOTE(dkorolev): I didn't find a quick way to get current binary dir and/or argv[0] from under `googletest`.
+      std::vector<std::string> path = current::strings::Split(__FILE__, current::FileSystem::GetPathSeparator());
+      path.pop_back();
+#ifdef NDEBUG
+      path.back() = ".current";
+#else
+      path.back() = ".current_debug";
+#endif
+      std::string const res = current::strings::Join(path, current::FileSystem::GetPathSeparator());
+      return *__FILE__ == current::FileSystem::GetPathSeparator() ? "/" + res : res;
+    }();
+    C5T_DLIB_SET_BASE_DIR(bin_path);
+  }
+};
+InitDLibOnce InitDLibOnce_impl;
 
 TEST(ActorModelTest, StaticAsserts) {
   struct A final {};
@@ -119,11 +145,30 @@ TEST(ActorModelTest, Smoke) {
 
   {
     std::ostringstream oss;
-    ActorSubscriberScope const _ = (a1 + a2).NewSubscribeTo<TestWorker>(oss);
+    ActorSubscriberScope const s1 = (a1 + a2).NewSubscribeTo<TestWorker>(oss);
     EmitTo<TestEvent<'a'>>(a1, 101);
     EmitTo<TestEvent<'a'>>(a2, 102);
     EmitTo<TestEvent<'a'>>(a3, 103);
     C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
     EXPECT_EQ("a101a102", oss.str());
+    // TODO: emitting the wrong type should be a compilation error, no?
+    EmitTo<TestEvent<'b'>>(b1, 201);
+    EmitTo<TestEvent<'b'>>(b2, 202);
+    EmitTo<TestEvent<'b'>>(b3, 203);
+    C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
+    EXPECT_EQ("a101a102", oss.str());
+    ActorSubscriberScope const s2 = (b1 + b2).NewSubscribeTo<TestWorker>(oss);
+    EmitTo<TestEvent<'b'>>(b1, 301);
+    EmitTo<TestEvent<'b'>>(b2, 302);
+    EmitTo<TestEvent<'b'>>(b3, 303);
+    C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
+    EXPECT_EQ("a101a102b301b302", oss.str());
   }
+}
+
+TEST(ActorModelTest, InjectedFromDLib) {
+  EXPECT_EQ(42,
+            C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<int()>("Smoke42"); }));
+  EXPECT_EQ(
+      0, C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<int()>("NonExistent"); }));
 }

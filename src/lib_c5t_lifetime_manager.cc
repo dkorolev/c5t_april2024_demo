@@ -53,6 +53,11 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
   std::vector<std::thread> threads_to_join_;
   std::mutex threads_to_join_mutex_;
 
+  // Set to `true` if the lifetime management singleton is being destructed organically,
+  // in which case the tracked processes will be stopped, `:abort()` will be called as needed,
+  // but `::exit(0)` will not be enforced. Important for `googletest` tests to actually fail when they do fail.
+  bool organic_exit_ = false;
+
   void Log(std::string const& s) const {
     std::lock_guard lock(logger_mutex_);
     if (logger_) {
@@ -227,7 +232,9 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
         Log("Termination sequence successful, all threads joined.");
         threads_joiner.join();
         Log("Termination sequence successful, all done.");
-        ::exit(exit_code);
+        if (!organic_exit_) {
+          ::exit(exit_code);
+        }
       } else {
         Log("");
         Log("Uncooperative threads remain, time to `abort()`.");
@@ -272,6 +279,7 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
     if (!previous_value) {
       Log("");
       Log("The program is terminating organically.");
+      organic_exit_ = true;
       DoExit();
     }
   }

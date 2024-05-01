@@ -393,6 +393,7 @@ void EmitTo(TopicID tid, ARGS&&... args) {
   EmitEventTo(tid, std::make_shared<T>(std::forward<ARGS>(args)...));
 }
 
+#ifdef C5T_ACTOR_MODEL_ENABLE_TESTING
 inline void C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE() {
   // TODO: This is ugly, slow, and not safe. Guard this by an `#ifdef`, to begin with, and lock with a mutex.
   std::vector<current::WaitableAtomic<ActorModelQueue>*> qs;
@@ -403,3 +404,4 @@ inline void C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE() {
     p->Wait([](ActorModelQueue const& q) { return q.done || q.fifo.empty(); });
   }
 }
+#endif  // C5T_ACTOR_MODEL_ENABLE_TESTING
