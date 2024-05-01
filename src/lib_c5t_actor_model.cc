@@ -94,6 +94,24 @@ class TopicsSubcribersAllTypesSingleton final : public ICleanupWithBenefits {
     }
     return *p;
   }
+
+  void AddTracker(ICanWait*) override {}
+  void RemoveTracker(ICanWait*) override {}
 };
 
 ICleanupWithBenefits& TMP_ActorModelSingleton() { return current::Singleton<TopicsSubcribersAllTypesSingleton>(); }
+
+void C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE() {
+#if 0
+  // TODO: This is ugly, slow, and not safe. Guard this by an `#ifdef`, to begin with, and lock with a mutex.
+  std::vector<current::WaitableAtomic<ActorModelQueue>*> qs;
+  for (auto p : current::Singleton<ActorModelQueuesDebugWaitSingleton>().queues) {
+    qs.push_back(p);
+  }
+  for (auto p : qs) {
+    p->Wait([](ActorModelQueue const& q) { return q.done || q.fifo.empty(); });
+  }
+#else
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+#endif
+}

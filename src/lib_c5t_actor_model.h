@@ -87,6 +87,11 @@ class ICleanupAndLinkAndPublish : public ICleanup {
   virtual void PublishGenericEvent(TopicID tid, std::shared_ptr<crnt::CurrentSuper> e2) = 0;
 };
 
+class ICanWait {
+ public:
+  virtual ~ICanWait() = default;
+};
+
 class ICleanupWithBenefits : public ICleanup {
  public:
   virtual void InternalRegisterTypeForSubscriber(std::type_index t,
@@ -94,6 +99,8 @@ class ICleanupWithBenefits : public ICleanup {
                                                  ICleanup& respective_singleton_instance) = 0;
   virtual EventsSubscriberID AllocateNextID() = 0;
   virtual ICleanupAndLinkAndPublish& HandlerPerType(std::type_index) = 0;
+  virtual void AddTracker(ICanWait*) = 0;
+  virtual void RemoveTracker(ICanWait*) = 0;
 };
 
 ICleanupWithBenefits& TMP_ActorModelSingleton();
@@ -114,16 +121,12 @@ struct ActorModelQueue final {
   std::vector<std::function<void()>> fifo;
 };
 
-struct ActorModelQueuesDebugWaitSingleton final {
-  std::unordered_set<current::WaitableAtomic<ActorModelQueue>*> queues;
-};
-
 template <class W>
 class ActorSubscriberScopeForImpl final : public ActorSubscriberScopeImpl {
  private:
   friend class ActorSubscriberScopeFor<W>;
 
-  struct OfExtendedScope final {
+  struct OfExtendedScope final : ICanWait {
     EventsSubscriberID const unique_id;
     current::WaitableAtomic<ActorModelQueue> wa;
     std::unique_ptr<W> worker;
@@ -131,11 +134,11 @@ class ActorSubscriberScopeForImpl final : public ActorSubscriberScopeImpl {
 
     OfExtendedScope(EventsSubscriberID id, std::unique_ptr<W> worker)
         : unique_id(id), worker(std::move(worker)), thread([this]() { Thread(); }) {
-      current::Singleton<ActorModelQueuesDebugWaitSingleton>().queues.insert(&wa);
+      TMP_ActorModelSingleton().AddTracker(this);
     }
 
     ~OfExtendedScope() {
-      current::Singleton<ActorModelQueuesDebugWaitSingleton>().queues.erase(&wa);
+      TMP_ActorModelSingleton().RemoveTracker(this);
       TMP_ActorModelSingleton().CleanupSubscriberByID(unique_id);
       wa.MutableUse([](ActorModelQueue& q) { q.done = true; });
       thread.join();
@@ -354,14 +357,5 @@ void EmitTo(TopicID tid, ARGS&&... args) {
 }
 
 #ifdef C5T_ACTOR_MODEL_ENABLE_TESTING
-inline void C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE() {
-  // TODO: This is ugly, slow, and not safe. Guard this by an `#ifdef`, to begin with, and lock with a mutex.
-  std::vector<current::WaitableAtomic<ActorModelQueue>*> qs;
-  for (auto p : current::Singleton<ActorModelQueuesDebugWaitSingleton>().queues) {
-    qs.push_back(p);
-  }
-  for (auto p : qs) {
-    p->Wait([](ActorModelQueue const& q) { return q.done || q.fifo.empty(); });
-  }
-}
+void C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
 #endif  // C5T_ACTOR_MODEL_ENABLE_TESTING
