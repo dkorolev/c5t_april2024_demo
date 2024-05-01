@@ -109,7 +109,7 @@ class TopicsSubcribersAllTypesSingleton final : public ICleanup {
   EventsSubscriberID AllocateNextID() { return static_cast<EventsSubscriberID>(++ids_used_); }
 
   template <typename T>
-  void RegisterTypeForSubscriber(EventsSubscriberID sid, ICleanup& respective_singleton_instance) {
+  void InternalRegisterTypeForSubscriber(EventsSubscriberID sid, ICleanup& respective_singleton_instance) {
     std::lock_guard lock(mutex_);
     auto t = std::type_index(typeid(T));
     auto& p = cleanups_per_type_[t];
@@ -153,6 +153,7 @@ class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLink {
   void AddGenericLink(EventsSubscriberID sid,
                       TopicID tid,
                       std::function<void(std::shared_ptr<crnt::CurrentSuper>)> f) override {
+    current::Singleton<TopicsSubcribersAllTypesSingleton>().InternalRegisterTypeForSubscriber<T>(sid, *this);
     std::lock_guard lock(mutex_);
     s_[sid].insert(tid);
     m2_[tid][sid] = std::move(f);
@@ -328,7 +329,6 @@ struct SubscribeAllImpl<T, TS...> {
     std::unordered_set<TopicID> const& ids = static_cast<TopicKeysOfType<T>&>(topics).topic_ids_;
     for (TopicID tid : ids) {
       ICleanupAndLink& s = current::Singleton<TopicsSubcribersPerTypeSingleton<T>>();
-      current::Singleton<TopicsSubcribersAllTypesSingleton>().RegisterTypeForSubscriber<T>(scope.GetUniqueID(), s);
       s.AddGenericLink(scope.GetUniqueID(), tid, [&scope](std::shared_ptr<crnt::CurrentSuper> e) {
         std::shared_ptr<T> e2(std::dynamic_pointer_cast<T>(std::move(e)));
         if (e2) {
