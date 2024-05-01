@@ -87,12 +87,13 @@ class ICleanup {
   virtual void CleanupSubscriberByID(EventsSubscriberID) = 0;
 };
 
-class ICleanupAndLink : public ICleanup {
+class ICleanupAndLinkAndPublish : public ICleanup {
  public:
-  virtual ~ICleanupAndLink() = default;
+  virtual ~ICleanupAndLinkAndPublish() = default;
   virtual void AddGenericLink(EventsSubscriberID sid,
                               TopicID tid,
                               std::function<void(std::shared_ptr<crnt::CurrentSuper>)> f) = 0;
+  virtual void PublishGenericEvent(TopicID tid, std::shared_ptr<crnt::CurrentSuper> e2) = 0;
 };
 
 class TopicsSubcribersAllTypesSingleton final : public ICleanup {
@@ -128,7 +129,7 @@ class TopicsSubcribersAllTypesSingleton final : public ICleanup {
 };
 
 template <typename T>
-class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLink {
+class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLinkAndPublish {
  private:
   std::atomic_uint64_t ids_used_;
   std::mutex mutex_;
@@ -179,6 +180,25 @@ class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLink {
     if (!e2) {
       std::cerr << "FATAL: Event type mismatch." << std::endl;
       ::abort();
+    }
+    for (auto const& e : m2_[tid]) {
+      // NOTE(dkorolev): This `.second` should just quickly add a `shared_ptr` to the queue.
+      // TODO(dkorolev): Maybe make it more explicit from the code, since a lambda is ambiguous.
+      e.second(e2);
+    }
+  }
+
+  void PublishGenericEvent(TopicID tid, std::shared_ptr<crnt::CurrentSuper> e2) override {
+    auto event = std::dynamic_pointer_cast<T>(e2);
+    if (!e2) {
+      std::cerr << "FATAL: Event type mismatch." << std::endl;
+      ::abort();
+    }
+    std::lock_guard lock(mutex_);
+    for (auto const& e : m1_[tid]) {
+      // NOTE(dkorolev): This `.second` should just quickly add a `shared_ptr` to the queue.
+      // TODO(dkorolev): Maybe make it more explicit from the code, since a lambda is ambiguous.
+      e.second(event);
     }
     for (auto const& e : m2_[tid]) {
       // NOTE(dkorolev): This `.second` should just quickly add a `shared_ptr` to the queue.
@@ -328,7 +348,7 @@ struct SubscribeAllImpl<T, TS...> {
   static void DoSubscribeAll(SCOPE& scope, TOPICS& topics) {
     std::unordered_set<TopicID> const& ids = static_cast<TopicKeysOfType<T>&>(topics).topic_ids_;
     for (TopicID tid : ids) {
-      ICleanupAndLink& s = current::Singleton<TopicsSubcribersPerTypeSingleton<T>>();
+      ICleanupAndLinkAndPublish& s = current::Singleton<TopicsSubcribersPerTypeSingleton<T>>();
       s.AddGenericLink(scope.GetUniqueID(), tid, [&scope](std::shared_ptr<crnt::CurrentSuper> e) {
         std::shared_ptr<T> e2(std::dynamic_pointer_cast<T>(std::move(e)));
         if (e2) {
@@ -436,7 +456,8 @@ class NullableActorSubscriberScope final {
 
 template <class T, class... ARGS>
 void EmitEventTo(TopicID tid, std::shared_ptr<T> event) {
-  current::Singleton<TopicsSubcribersPerTypeSingleton<T>>().PublishEvent(tid, std::move(event));
+  ICleanupAndLinkAndPublish& s = current::Singleton<TopicsSubcribersPerTypeSingleton<T>>();
+  s.PublishGenericEvent(tid, std::move(event));
 }
 
 template <class T, class... ARGS>
