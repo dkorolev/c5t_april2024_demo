@@ -1,4 +1,5 @@
 #include "lib_c5t_actor_model.h"
+#include <mutex>
 #include "bricks/util/singleton.h"
 
 class TopicIDGenerator final {
@@ -95,23 +96,35 @@ class TopicsSubcribersAllTypesSingleton final : public ICleanupWithBenefits {
     return *p;
   }
 
-  void AddTracker(ICanWait*) override {}
-  void RemoveTracker(ICanWait*) override {}
+  std::mutex trackers_mutex;
+  std::unordered_set<ICanWait*> tracked_workers;
+
+  void AddTracker(ICanWait* w) override {
+    std::lock_guard lock(trackers_mutex);
+    tracked_workers.insert(w);
+  }
+
+  void RemoveTracker(ICanWait* w) override {
+    std::lock_guard lock(trackers_mutex);
+    tracked_workers.erase(w);
+  }
+
+  void DebugWaitForAllTrackedWorkersToComplete() override {
+    std::map<ICanWait*, size_t> epochs;
+    {
+      std::lock_guard lock(trackers_mutex);
+      for (auto& e : tracked_workers) {
+        epochs[e] = e->GetNumQueued();
+      }
+    }
+    for (auto const& [k, v] : epochs) {
+      std::lock_guard lock(trackers_mutex);
+      if (tracked_workers.count(k)) {
+        k->WaitUntilNumProcessedIsAtLeast(v);
+      }
+    }
+    // std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
 };
 
 ICleanupWithBenefits& TMP_ActorModelSingleton() { return current::Singleton<TopicsSubcribersAllTypesSingleton>(); }
-
-void C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE() {
-#if 0
-  // TODO: This is ugly, slow, and not safe. Guard this by an `#ifdef`, to begin with, and lock with a mutex.
-  std::vector<current::WaitableAtomic<ActorModelQueue>*> qs;
-  for (auto p : current::Singleton<ActorModelQueuesDebugWaitSingleton>().queues) {
-    qs.push_back(p);
-  }
-  for (auto p : qs) {
-    p->Wait([](ActorModelQueue const& q) { return q.done || q.fifo.empty(); });
-  }
-#else
-  std::this_thread::sleep_for(std::chrono::milliseconds(1));
-#endif
-}

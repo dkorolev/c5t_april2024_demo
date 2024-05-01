@@ -43,8 +43,6 @@ TODOs;
   - add some DEBUG WAIT FOR ALL QUEUES TO COMPLETE!
 */
 
-#define C5T_ACTOR_MODEL_ENABLE_TESTING
-
 #include <gtest/gtest.h>
 
 #include "lib_c5t_actor_model.h"

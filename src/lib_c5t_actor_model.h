@@ -90,6 +90,8 @@ class ICleanupAndLinkAndPublish : public ICleanup {
 class ICanWait {
  public:
   virtual ~ICanWait() = default;
+  virtual size_t GetNumQueued() = 0;
+  virtual void WaitUntilNumProcessedIsAtLeast(size_t) = 0;
 };
 
 class ICleanupWithBenefits : public ICleanup {
@@ -99,6 +101,7 @@ class ICleanupWithBenefits : public ICleanup {
                                                  ICleanup& respective_singleton_instance) = 0;
   virtual EventsSubscriberID AllocateNextID() = 0;
   virtual ICleanupAndLinkAndPublish& HandlerPerType(std::type_index) = 0;
+  virtual void DebugWaitForAllTrackedWorkersToComplete() = 0;
   virtual void AddTracker(ICanWait*) = 0;
   virtual void RemoveTracker(ICanWait*) = 0;
 };
@@ -118,6 +121,8 @@ class ActorSubscriberScopeFor;
 
 struct ActorModelQueue final {
   bool done = false;
+  size_t num_queued = 0u;
+  size_t num_processed = 0u;
   std::vector<std::function<void()>> fifo;
 };
 
@@ -166,6 +171,7 @@ class ActorSubscriberScopeForImpl final : public ActorSubscriberScopeImpl {
           for (auto& f : w.first) {
             try {
               f();
+              ++wa.MutableScopedAccessor()->num_processed;
             } catch (current::Exception const&) {
               // TODO
             } catch (std::exception const&) {
@@ -175,6 +181,12 @@ class ActorSubscriberScopeForImpl final : public ActorSubscriberScopeImpl {
           worker->OnBatchDone();
         }
       }
+    }
+
+    size_t GetNumQueued() override { return wa.ImmutableScopedAccessor()->num_queued; }
+
+    void WaitUntilNumProcessedIsAtLeast(size_t c) override {
+      wa.Wait([c](ActorModelQueue const& q) { return q.done || q.num_processed >= c; });
     }
   };
 
@@ -194,6 +206,7 @@ class ActorSubscriberScopeForImpl final : public ActorSubscriberScopeImpl {
     current::Borrowed<OfExtendedScope> borrowed(extended_);
     extended_->wa.MutableUse([b = std::move(borrowed), &e](ActorModelQueue& q) {
       q.fifo.push_back([b2 = std::move(b), e2 = std::move(e)]() { b2->worker->OnEvent(*e2); });
+      ++q.num_queued;
     });
   }
 
@@ -356,6 +369,6 @@ void EmitTo(TopicID tid, ARGS&&... args) {
   EmitEventTo(tid, std::make_shared<T>(std::forward<ARGS>(args)...));
 }
 
-#ifdef C5T_ACTOR_MODEL_ENABLE_TESTING
-void C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
-#endif  // C5T_ACTOR_MODEL_ENABLE_TESTING
+inline void C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE() {
+  TMP_ActorModelSingleton().DebugWaitForAllTrackedWorkersToComplete();
+}
