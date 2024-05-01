@@ -1,5 +1,7 @@
-#include "lib_c5t_actor_model.h"
 #include <mutex>
+#include <unordered_map>
+
+#include "lib_c5t_actor_model.h"
 #include "bricks/util/singleton.h"
 
 class TopicIDGenerator final {
@@ -31,7 +33,7 @@ class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLinkAndPublish 
   void AddGenericLink(EventsSubscriberID sid,
                       TopicID tid,
                       std::function<void(std::shared_ptr<crnt::CurrentSuper>)> f) override {
-    TMP_ActorModelSingleton().InternalRegisterTypeForSubscriber(type_index_, sid, *this);
+    C5T_ACTOR_MODEL_INSTANCE().InternalRegisterTypeForSubscriber(type_index_, sid, *this);
     std::lock_guard lock(mutex_);
     s_[sid].insert(tid);
     m2_[tid][sid] = std::move(f);
@@ -55,7 +57,7 @@ class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLinkAndPublish 
   }
 };
 
-class TopicsSubcribersAllTypesSingleton final : public ICleanupWithBenefits {
+class TopicsSubcribersAllTypesSingleton final : public C5T_ACTOR_MODEL_Interface {
  private:
   std::atomic_uint64_t ids_used_;
 
@@ -123,8 +125,9 @@ class TopicsSubcribersAllTypesSingleton final : public ICleanupWithBenefits {
         k->WaitUntilNumProcessedIsAtLeast(v);
       }
     }
-    // std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 };
 
-ICleanupWithBenefits& TMP_ActorModelSingleton() { return current::Singleton<TopicsSubcribersAllTypesSingleton>(); }
+C5T_ACTOR_MODEL_Interface& ActorModelInjectableInstance::GetSingleton() {
+  return current::Singleton<TopicsSubcribersAllTypesSingleton>();
+}

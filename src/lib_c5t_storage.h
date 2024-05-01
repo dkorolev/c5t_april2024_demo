@@ -238,6 +238,7 @@ class C5T_STORAGE_FIELD : public C5T_STORAGE_FIELD_Interface {
 
 // TODO: rename
 struct C5T_Storage_Fields_Singleton final {
+  // TODO: atomic?
   C5T_STORAGE_Interface* pimpl = nullptr;
 };
 

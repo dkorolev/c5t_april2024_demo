@@ -48,6 +48,7 @@ TODOs;
 #include "lib_c5t_actor_model.h"
 #include "lib_c5t_dlib.h"
 #include "lib_c5t_lifetime_manager.h"
+#include "lib_test_actor_model.h"
 
 #include "bricks/file/file.h"
 #include "bricks/strings/split.h"
@@ -169,4 +170,42 @@ TEST(ActorModelTest, InjectedFromDLib) {
             C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<int()>("Smoke42"); }));
   EXPECT_EQ(
       0, C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<int()>("NonExistent"); }));
+
+  IActorModel iam(C5T_ACTOR_MODEL_INSTANCE());
+  auto const t = Topic<Event_DL2TEST>("topic_from_dlib");
+
+  struct TestWorker final {
+    bool first = true;
+    std::ostringstream& oss;
+    TestWorker(std::ostringstream& oss) : oss(oss) {}
+    void OnEvent(Event_DL2TEST const& e) {
+      if (first) {
+        first = false;
+      } else {
+        oss << ',';
+      }
+      oss << e.v;
+    }
+    void OnBatchDone() {}
+    void OnShutdown() {}
+  };
+
+  std::ostringstream oss;
+  // TODO: (t+t) is ugly ...
+  ActorSubscriberScope const s = (t + t).NewSubscribeTo<TestWorker>(oss);
+
+  C5T_DLIB_CALL("test_actor_model",
+                [&](C5T_DLib& dlib) { dlib.CallVoid<void(IDLib&, TopicID)>("ExternalEmitter", iam, t.GetTopicID()); });
+
+  C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
+  EXPECT_EQ("42", oss.str());
+
+  for (int i = 0; i < 2; ++i) {
+    C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) {
+      dlib.CallVoid<void(IDLib&, TopicID)>("ExternalEmitter", iam, t.GetTopicID());
+    });
+  }
+
+  C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
+  EXPECT_EQ("42,43,44", oss.str());
 }

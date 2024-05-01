@@ -1,11 +1,9 @@
 #pragma once
 
 #include <memory>
-#include <mutex>
 #include <thread>
 #include <vector>
 #include <typeindex>
-#include <unordered_map>
 #include <unordered_set>
 
 #include "lib_c5t_lifetime_manager.h"
@@ -94,7 +92,7 @@ class ICanWait {
   virtual void WaitUntilNumProcessedIsAtLeast(size_t) = 0;
 };
 
-class ICleanupWithBenefits : public ICleanup {
+class C5T_ACTOR_MODEL_Interface : public ICleanup {
  public:
   virtual void InternalRegisterTypeForSubscriber(std::type_index t,
                                                  EventsSubscriberID sid,
@@ -106,7 +104,7 @@ class ICleanupWithBenefits : public ICleanup {
   virtual void RemoveTracker(ICanWait*) = 0;
 };
 
-ICleanupWithBenefits& TMP_ActorModelSingleton();
+inline C5T_ACTOR_MODEL_Interface& C5T_ACTOR_MODEL_INSTANCE();
 
 struct ConstructTopicsSubscriberScope final {};
 struct ConstructTopicsSubscriberScopeImpl final {};
@@ -139,12 +137,12 @@ class ActorSubscriberScopeForImpl final : public ActorSubscriberScopeImpl {
 
     OfExtendedScope(EventsSubscriberID id, std::unique_ptr<W> worker)
         : unique_id(id), worker(std::move(worker)), thread([this]() { Thread(); }) {
-      TMP_ActorModelSingleton().AddTracker(this);
+      C5T_ACTOR_MODEL_INSTANCE().AddTracker(this);
     }
 
     ~OfExtendedScope() {
-      TMP_ActorModelSingleton().RemoveTracker(this);
-      TMP_ActorModelSingleton().CleanupSubscriberByID(unique_id);
+      C5T_ACTOR_MODEL_INSTANCE().RemoveTracker(this);
+      C5T_ACTOR_MODEL_INSTANCE().CleanupSubscriberByID(unique_id);
       wa.MutableUse([](ActorModelQueue& q) { q.done = true; });
       thread.join();
     }
@@ -235,7 +233,7 @@ class ActorSubscriberScopeFor final {
 
   ActorSubscriberScopeFor(ConstructTopicsSubscriberScope, std::unique_ptr<W> worker)
       : impl_(std::make_unique<ActorSubscriberScopeForImpl<W>>(
-            ConstructTopicsSubscriberScopeImpl(), TMP_ActorModelSingleton().AllocateNextID(), std::move(worker))) {}
+            ConstructTopicsSubscriberScopeImpl(), C5T_ACTOR_MODEL_INSTANCE().AllocateNextID(), std::move(worker))) {}
 
   ActorSubscriberScopeFor(ActorSubscriberScopeFor&& rhs) = default;
 
@@ -252,7 +250,7 @@ struct SubscribeAllImpl<T, TS...> {
   static void DoSubscribeAll(SCOPE& scope, TOPICS& topics) {
     std::unordered_set<TopicID> const& ids = static_cast<TopicKeysOfType<T>&>(topics).topic_ids_;
     for (TopicID tid : ids) {
-      ICleanupAndLinkAndPublish& s = TMP_ActorModelSingleton().HandlerPerType(std::type_index(typeid(T)));
+      ICleanupAndLinkAndPublish& s = C5T_ACTOR_MODEL_INSTANCE().HandlerPerType(std::type_index(typeid(T)));
       s.AddGenericLink(scope.GetUniqueID(), tid, [&scope](std::shared_ptr<crnt::CurrentSuper> e) {
         std::shared_ptr<T> e2(std::dynamic_pointer_cast<T>(std::move(e)));
         if (e2) {
@@ -360,7 +358,7 @@ class NullableActorSubscriberScope final {
 
 template <class T, class... ARGS>
 void EmitEventTo(TopicID tid, std::shared_ptr<T> event) {
-  ICleanupAndLinkAndPublish& s = TMP_ActorModelSingleton().HandlerPerType(std::type_index(typeid(T)));
+  ICleanupAndLinkAndPublish& s = C5T_ACTOR_MODEL_INSTANCE().HandlerPerType(std::type_index(typeid(T)));
   s.PublishGenericEvent(tid, std::move(event));
 }
 
@@ -370,5 +368,24 @@ void EmitTo(TopicID tid, ARGS&&... args) {
 }
 
 inline void C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE() {
-  TMP_ActorModelSingleton().DebugWaitForAllTrackedWorkersToComplete();
+  C5T_ACTOR_MODEL_INSTANCE().DebugWaitForAllTrackedWorkersToComplete();
+}
+
+struct ActorModelInjectableInstance final {
+  std::atomic<C5T_ACTOR_MODEL_Interface*> p = std::atomic<C5T_ACTOR_MODEL_Interface*>(nullptr);
+  C5T_ACTOR_MODEL_Interface& Get() {
+    if (!p) {
+      p = &GetSingleton();
+    }
+    return *p;
+  }
+  C5T_ACTOR_MODEL_Interface& GetSingleton();
+};
+
+inline C5T_ACTOR_MODEL_Interface& C5T_ACTOR_MODEL_INSTANCE() {
+  return current::Singleton<ActorModelInjectableInstance>().Get();
+}
+
+inline void C5T_ACTOR_MODEL_INJECT(C5T_ACTOR_MODEL_Interface& injected) {
+  current::Singleton<ActorModelInjectableInstance>().p = &injected;
 }
