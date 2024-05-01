@@ -124,6 +124,10 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
     auto f = [borrowed_extended = current::Borrowed<OfExtendedLifetime>(extended_),
               called = std::make_shared<current::WaitableAtomic<bool>>(false),
               f1 = std::move(f0)]() mutable {
+      // NOTE(dkorolev): <-- this check is critical for graceful shutdown!
+      if (!borrowed_extended) {
+        return;
+      }
       // Guard against spurious wakeups.
       if (borrowed_extended->termination_initiated_atomic_ ||
           borrowed_extended->termination_initiated_.ImmutableUse([](std::atomic_bool const& b) { return b.load(); })) {
@@ -150,7 +154,7 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
     return result;
   }
 #else
-  // NOTE(dkorolev): With the "<--" statement above this implementation is not neceessary.
+  // NOTE(dkorolev): With the two "<--" statements above, this "custom" implementation is not neceessary.
   [[nodiscard]] LifetimeTerminationSignalScope SubscribeToTerminationEvent(std::function<void()> f0) override {
     EnsureHasLogger();
     struct LifetimeTerminationSignalScopeRealImpl final : LifetimeTerminationSignalScopeImpl {
