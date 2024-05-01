@@ -1,8 +1,5 @@
 #pragma once
 
-// NOTE(dkorolev): This code is super ugly, but that's what we have today.
-// TODO(dkorolev): Introduce a `lib_*.cc` file!
-
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -96,37 +93,15 @@ class ICleanupAndLinkAndPublish : public ICleanup {
   virtual void PublishGenericEvent(TopicID tid, std::shared_ptr<crnt::CurrentSuper> e2) = 0;
 };
 
-class TopicsSubcribersAllTypesSingleton final : public ICleanup {
- private:
-  std::atomic_uint64_t ids_used_;
-
-  std::mutex mutex_;
-  std::unordered_map<std::type_index, ICleanup*> cleanups_per_type_;
-  std::unordered_map<EventsSubscriberID, std::unordered_set<std::type_index>> types_per_ids_;
-
+class ICleanupWithBenefits : public ICleanup {
  public:
-  TopicsSubcribersAllTypesSingleton() : ids_used_(0ull) {}
-
-  EventsSubscriberID AllocateNextID() { return static_cast<EventsSubscriberID>(++ids_used_); }
-
-  template <typename T>
-  void InternalRegisterTypeForSubscriber(EventsSubscriberID sid, ICleanup& respective_singleton_instance) {
-    std::lock_guard lock(mutex_);
-    auto t = std::type_index(typeid(T));
-    auto& p = cleanups_per_type_[t];
-    if (!p) {
-      p = &respective_singleton_instance;
-    }
-    types_per_ids_[sid].insert(t);
-  }
-
-  void CleanupSubscriberByID(EventsSubscriberID sid) override {
-    std::lock_guard lock(mutex_);
-    for (auto& e : types_per_ids_[sid]) {
-      cleanups_per_type_[e]->CleanupSubscriberByID(sid);
-    }
-  }
+  virtual void InternalRegisterTypeForSubscriber(std::type_index t,
+                                                 EventsSubscriberID sid,
+                                                 ICleanup& respective_singleton_instance) = 0;
+  virtual EventsSubscriberID AllocateNextID() = 0;
 };
+
+ICleanupWithBenefits& TMP_ActorModelSingleton();
 
 template <typename T>
 class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLinkAndPublish {
@@ -147,7 +122,7 @@ class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLinkAndPublish 
   void AddGenericLink(EventsSubscriberID sid,
                       TopicID tid,
                       std::function<void(std::shared_ptr<crnt::CurrentSuper>)> f) override {
-    current::Singleton<TopicsSubcribersAllTypesSingleton>().InternalRegisterTypeForSubscriber<T>(sid, *this);
+    TMP_ActorModelSingleton().InternalRegisterTypeForSubscriber(std::type_index(typeid(T)), sid, *this);
     std::lock_guard lock(mutex_);
     s_[sid].insert(tid);
     m2_[tid][sid] = std::move(f);
@@ -170,7 +145,6 @@ class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLinkAndPublish 
     }
   }
 };
-
 struct ConstructTopicsSubscriberScope final {};
 struct ConstructTopicsSubscriberScopeImpl final {};
 
@@ -209,7 +183,7 @@ class ActorSubscriberScopeForImpl final : public ActorSubscriberScopeImpl {
 
     ~OfExtendedScope() {
       current::Singleton<ActorModelQueuesDebugWaitSingleton>().queues.erase(&wa);
-      current::Singleton<TopicsSubcribersAllTypesSingleton>().CleanupSubscriberByID(unique_id);
+      TMP_ActorModelSingleton().CleanupSubscriberByID(unique_id);
       wa.MutableUse([](ActorModelQueue& q) { q.done = true; });
       thread.join();
     }
@@ -292,9 +266,7 @@ class ActorSubscriberScopeFor final {
 
   ActorSubscriberScopeFor(ConstructTopicsSubscriberScope, std::unique_ptr<W> worker)
       : impl_(std::make_unique<ActorSubscriberScopeForImpl<W>>(
-            ConstructTopicsSubscriberScopeImpl(),
-            current::Singleton<TopicsSubcribersAllTypesSingleton>().AllocateNextID(),
-            std::move(worker))) {}
+            ConstructTopicsSubscriberScopeImpl(), TMP_ActorModelSingleton().AllocateNextID(), std::move(worker))) {}
 
   ActorSubscriberScopeFor(ActorSubscriberScopeFor&& rhs) = default;
 
