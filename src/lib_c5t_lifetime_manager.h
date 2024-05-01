@@ -23,6 +23,17 @@ struct LifetimeTrackedInstance final {
   std::string ToShortString() const;
 };
 
+#if 1
+using LifetimeTerminationSignalScope = current::WaitableAtomicSubscriberScope;
+#else
+class LifetimeTerminationSignalScopeImpl {
+ public:
+  virtual ~LifetimeTerminationSignalScopeImpl() = default;
+};
+
+using LifetimeTerminationSignalScope = std::unique_ptr<LifetimeTerminationSignalScopeImpl>;
+#endif
+
 class LifetimeManagerSingletonInterface {
  protected:
   LifetimeManagerSingletonInterface() = default;
@@ -40,7 +51,7 @@ class LifetimeManagerSingletonInterface {
   virtual void EmplaceThreadImpl(std::thread t) = 0;
 
   // This ensures `f` will be called once and only once if and when it's time to terminate.
-  [[nodiscard]] virtual current::WaitableAtomicSubscriberScope SubscribeToTerminationEvent(std::function<void()> f) = 0;
+  [[nodiscard]] virtual LifetimeTerminationSignalScope SubscribeToTerminationEvent(std::function<void()> f) = 0;
 
   // To list the currently active threads.
   virtual void DumpActive(std::function<void(LifetimeTrackedInstance const&)> f = nullptr) const = 0;
@@ -73,7 +84,7 @@ LifetimeManagerSingletonInterface& LifetimeManagerSingletonInstance();
 
 // Returns the `[[nodiscard]]`-ed scope for the lifetime of the passed-in lambda being registered.
 template <class F>
-[[nodiscard]] inline current::WaitableAtomicSubscriberScope C5T_LIFETIME_MANAGER_NOTIFY_OF_SHUTDOWN(F&& f) {
+[[nodiscard]] inline LifetimeTerminationSignalScope C5T_LIFETIME_MANAGER_NOTIFY_OF_SHUTDOWN(F&& f) {
   return LifetimeManagerSingletonInstance().SubscribeToTerminationEvent(std::forward<F>(f));
 }
 

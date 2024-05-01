@@ -118,12 +118,12 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
     });
   }
 
-  [[nodiscard]] current::WaitableAtomicSubscriberScope SubscribeToTerminationEvent(std::function<void()> f0) override {
-    EnsureHasLogger();
+#if 1
+  [[nodiscard]] LifetimeTerminationSignalScope SubscribeToTerminationEvent(std::function<void()> f0) override {
     // Ensures that `f0()` will only be called once, possibly from the very call to `SubscribeToTerminationEvent()`.
-    auto const f = [borrowed_extended = current::Borrowed<OfExtendedLifetime>(extended_),
-                    called = std::make_shared<current::WaitableAtomic<bool>>(false),
-                    f1 = std::move(f0)]() {
+    auto f = [borrowed_extended = current::Borrowed<OfExtendedLifetime>(extended_),
+              called = std::make_shared<current::WaitableAtomic<bool>>(false),
+              f1 = std::move(f0)]() mutable {
       // Guard against spurious wakeups.
       if (borrowed_extended->termination_initiated_atomic_ ||
           borrowed_extended->termination_initiated_.ImmutableUse([](std::atomic_bool const& b) { return b.load(); })) {
@@ -136,6 +136,7 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
                 return true;
               }
             })) {
+          borrowed_extended = nullptr;  // NOTE(dkorolev): <-- this statement is critical for graceful shutdown!
           f1();
         }
       }
@@ -148,6 +149,35 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
     }
     return result;
   }
+#else
+  // NOTE(dkorolev): With the "<--" statement above this implementation is not neceessary.
+  [[nodiscard]] LifetimeTerminationSignalScope SubscribeToTerminationEvent(std::function<void()> f0) override {
+    EnsureHasLogger();
+    struct LifetimeTerminationSignalScopeRealImpl final : LifetimeTerminationSignalScopeImpl {
+      current::Borrowed<OfExtendedLifetime> borrowed_;
+      std::function<void()> f_;
+      current::WaitableAtomicSubscriberScope wa_scope_;
+      std::atomic_uint64_t call_count_ = std::atomic_uint64_t(0ull);
+      LifetimeTerminationSignalScopeRealImpl(current::Borrowed<OfExtendedLifetime> borrowed, std::function<void()> f)
+          : borrowed_(std::move(borrowed)),
+            f_(std::move(f)),
+            wa_scope_(borrowed_->termination_initiated_.Subscribe([this]() { Signal(); })) {
+        if (borrowed_->termination_initiated_atomic_) {
+          Signal();
+        }
+      }
+      void Signal() {
+        uint64_t const v = call_count_++;
+        if (!v) {
+          f_();
+        }
+        borrowed_ = nullptr;
+      }
+    };
+    return std::make_unique<LifetimeTerminationSignalScopeRealImpl>(current::Borrowed<OfExtendedLifetime>(extended_),
+                                                                    std::move(f0));
+  }
+#endif
 
   void DumpActive(std::function<void(LifetimeTrackedInstance const&)> f0 = nullptr) const override {
     EnsureHasLogger();
