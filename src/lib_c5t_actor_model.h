@@ -13,6 +13,9 @@
 
 #include "lib_c5t_lifetime_manager.h"
 
+// TODO: even more reasons for a `.cc` file!
+#include "bricks/sync/owned_borrowed.h"
+
 enum class TopicID : uint64_t {};
 class TopicIDGenerator final {
  private:
@@ -176,10 +179,60 @@ template <class W>
 class ActorSubscriberScopeForImpl final : public ActorSubscriberScopeImpl {
  private:
   friend class ActorSubscriberScopeFor<W>;
-  EventsSubscriberID const unique_id;
-  current::WaitableAtomic<ActorModelQueue> wa;
-  std::unique_ptr<W> worker;
-  std::thread thread;
+
+  struct OfExtendedScope final {
+    EventsSubscriberID const unique_id;
+    current::WaitableAtomic<ActorModelQueue> wa;
+    std::unique_ptr<W> worker;
+    std::thread thread;
+
+    OfExtendedScope(EventsSubscriberID id, std::unique_ptr<W> worker)
+        : unique_id(id), worker(std::move(worker)), thread([this]() { Thread(); }) {
+      current::Singleton<ActorModelQueuesDebugWaitSingleton>().queues.insert(&wa);
+    }
+
+    ~OfExtendedScope() {
+      current::Singleton<ActorModelQueuesDebugWaitSingleton>().queues.erase(&wa);
+      current::Singleton<TopicsSubcribersAllTypesSingleton>().CleanupSubscriberByID(unique_id);
+      wa.MutableUse([](ActorModelQueue& q) { q.done = true; });
+      thread.join();
+    }
+
+    void Thread() {
+      auto const scope_term = C5T_LIFETIME_MANAGER_NOTIFY_OF_SHUTDOWN(
+          [this]() { wa.MutableUse([](ActorModelQueue& q) { q.done = true; }); });
+      while (true) {
+        using r_t = std::pair<std::vector<std::function<void()>>, bool>;
+        r_t const w = wa.Wait([](ActorModelQueue const& q) { return q.done || !q.fifo.empty(); },
+                              [](ActorModelQueue& q) -> r_t {
+                                if (q.done) {
+                                  return {{}, true};
+                                } else {
+                                  std::vector<std::function<void()>> foo;
+                                  std::swap(q.fifo, foo);
+                                  return {foo, false};
+                                }
+                              });
+        if (w.second) {
+          worker->OnShutdown();
+          break;
+        } else {
+          for (auto& f : w.first) {
+            try {
+              f();
+            } catch (current::Exception const&) {
+              // TODO
+            } catch (std::exception const&) {
+              // TODO
+            }
+          }
+          worker->OnBatchDone();
+        }
+      }
+    }
+  };
+
+  current::Owned<OfExtendedScope> extended_;
 
   // Always hidden inside a `unique_ptr<>`, so no copies and no moves.
   ActorSubscriberScopeForImpl() = delete;
@@ -188,63 +241,22 @@ class ActorSubscriberScopeForImpl final : public ActorSubscriberScopeImpl {
   ActorSubscriberScopeForImpl(ActorSubscriberScopeForImpl&&) = delete;
   ActorSubscriberScopeForImpl& operator=(ActorSubscriberScopeForImpl&&) = delete;
 
-  void Thread() {
-    auto const scope_term =
-        C5T_LIFETIME_MANAGER_NOTIFY_OF_SHUTDOWN([this]() { wa.MutableUse([](ActorModelQueue& q) { q.done = true; }); });
-    while (true) {
-      using r_t = std::pair<std::vector<std::function<void()>>, bool>;
-      r_t const w = wa.Wait([](ActorModelQueue const& q) { return q.done || !q.fifo.empty(); },
-                            [](ActorModelQueue& q) -> r_t {
-                              if (q.done) {
-                                return {{}, true};
-                              } else {
-                                std::vector<std::function<void()>> foo;
-                                std::swap(q.fifo, foo);
-                                return {foo, false};
-                              }
-                            });
-      if (w.second) {
-        worker->OnShutdown();
-        break;
-      } else {
-        for (auto& f : w.first) {
-          try {
-            f();
-          } catch (current::Exception const&) {
-            // TODO
-          } catch (std::exception const&) {
-            // TODO
-          }
-        }
-        worker->OnBatchDone();
-      }
-      wa.Notify();
-    }
-  }
-
  public:
   // TODO: make private, much like `ExtractImpl()` and `GetUniqueID()`.
   template <typename E>
   void EnqueueEvent(std::shared_ptr<E> e) {
-    wa.MutableUse(
-        [this, &e](ActorModelQueue& q) { q.fifo.push_back([this, e2 = std::move(e)]() { worker->OnEvent(*e2); }); });
+    current::Borrowed<OfExtendedScope> borrowed(extended_);
+    extended_->wa.MutableUse([b = std::move(borrowed), &e](ActorModelQueue& q) {
+      q.fifo.push_back([b2 = std::move(b), e2 = std::move(e)]() { b2->worker->OnEvent(*e2); });
+    });
   }
 
   using worker_t = W;
 
   ActorSubscriberScopeForImpl(ConstructTopicsSubscriberScopeImpl, EventsSubscriberID id, std::unique_ptr<W> worker)
-      : unique_id(id), worker(std::move(worker)), thread([this]() { Thread(); }) {
-    current::Singleton<ActorModelQueuesDebugWaitSingleton>().queues.insert(&wa);
-  }
+      : extended_(current::MakeOwned<OfExtendedScope>(id, std::move(worker))) {}
 
-  ~ActorSubscriberScopeForImpl() override {
-    current::Singleton<ActorModelQueuesDebugWaitSingleton>().queues.erase(&wa);
-    current::Singleton<TopicsSubcribersAllTypesSingleton>().CleanupSubscriberByID(unique_id);
-    wa.MutableUse([](ActorModelQueue& q) { q.done = true; });
-    thread.join();
-  }
-
-  EventsSubscriberID GetUniqueID() const { return unique_id; }
+  EventsSubscriberID GetUniqueID() const { return extended_->unique_id; }
 };
 
 template <class W>

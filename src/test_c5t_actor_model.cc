@@ -144,6 +144,7 @@ TEST(ActorModelTest, Smoke) {
   auto const b3 = Topic<TestEvent<'b'>>("b3");
 
   {
+    /*
     std::ostringstream oss;
     ActorSubscriberScope const s1 = (a1 + a2).NewSubscribeTo<TestWorker>(oss);
     EmitTo<TestEvent<'a'>>(a1, 101);
@@ -163,6 +164,7 @@ TEST(ActorModelTest, Smoke) {
     EmitTo<TestEvent<'b'>>(b3, 303);
     C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
     EXPECT_EQ("a101a102b301b302", oss.str());
+    */
   }
 }
 

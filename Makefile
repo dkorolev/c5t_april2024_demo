@@ -36,7 +36,7 @@ ${RELEASE_BUILD_DIR}: CMakeLists.txt src
 	@C5T_DEPS="${C5T_DEPS}" cmake -DCMAKE_BUILD_TYPE=Release -B "${RELEASE_BUILD_DIR}" .
 
 test: release
-	@(cd "${RELEASE_BUILD_DIR}"; make test)
+	@(cd "${RELEASE_BUILD_DIR}"; make test) || (cat .current/Testing/Temporary/LastTest.log; exit 1)
 
 debug: debug_dir CMakeLists.txt
 	@MAKEFLAGS=--no-print-directory cmake --build "${DEBUG_BUILD_DIR}" -j ${CORES}
@@ -45,7 +45,7 @@ debug_dir: ${DEBUG_BUILD_DIR} .gitignore
 	@grep "^${DEBUG_BUILD_DIR}/$$" .gitignore >/dev/null || echo "${DEBUG_BUILD_DIR}/" >>.gitignore
 
 ${DEBUG_BUILD_DIR}: CMakeLists.txt src
-	@C5T_DEPS="${C5T_DEPS}" cmake -B "${DEBUG_BUILD_DIR}" .
+	@C5T_DEPS="${C5T_DEPS}" cmake -DCMAKE_BUILD_TYPE=Debug -B "${DEBUG_BUILD_DIR}" .
 
 debug_test: debug
 	@(cd "${DEBUG_BUILD_DIR}"; make test) || (cat .current_debug/Testing/Temporary/LastTest.log; exit 1)

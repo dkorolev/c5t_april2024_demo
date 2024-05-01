@@ -4,6 +4,7 @@
 
 #include "bricks/strings/util.h"
 #include "bricks/file/file.h"
+#include "bricks/sync/owned_borrowed.h"
 
 static std::string LifetimeTrackedInstanceBaseName(std::string const& s) {
   char const* r = s.c_str();
@@ -40,18 +41,25 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
     std::map<uint64_t, LifetimeTrackedInstance> still_alive;
   };
 
-  mutable std::atomic_bool logger_initialized_;
+  struct OfExtendedLifetime final {
+    mutable std::atomic_bool logger_initialized_ = std::atomic_bool(false);
 
-  mutable std::mutex logger_mutex_;
-  mutable std::function<void(std::string const&)> logger_ = nullptr;
+    mutable std::mutex logger_mutex_;
+    mutable std::function<void(std::string const&)> logger_ = nullptr;
 
-  current::WaitableAtomic<std::atomic_bool> termination_initiated_;
-  std::atomic_bool& termination_initiated_atomic_;
+    current::WaitableAtomic<std::atomic_bool> termination_initiated_;
+    std::atomic_bool& termination_initiated_atomic_;
 
-  current::WaitableAtomic<TrackedInstances> tracking_;
+    current::WaitableAtomic<TrackedInstances> tracking_;
 
-  std::vector<std::thread> threads_to_join_;
-  std::mutex threads_to_join_mutex_;
+    std::vector<std::thread> threads_to_join_;
+    std::mutex threads_to_join_mutex_;
+
+    OfExtendedLifetime()
+        : termination_initiated_(false),
+          termination_initiated_atomic_(*termination_initiated_.MutableScopedAccessor()) {}
+  };
+  current::Owned<OfExtendedLifetime> extended_;
 
   // Set to `true` if the lifetime management singleton is being destructed organically,
   // in which case the tracked processes will be stopped, `:abort()` will be called as needed,
@@ -59,37 +67,32 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
   bool organic_exit_ = false;
 
   void Log(std::string const& s) const {
-    std::lock_guard lock(logger_mutex_);
-    if (logger_) {
-      logger_(s);
+    std::lock_guard lock(extended_->logger_mutex_);
+    if (extended_->logger_) {
+      extended_->logger_(s);
     } else {
       std::cerr << "LIFETIME_MANAGER_LOG: " << s << std::endl;
     }
   }
 
  public:
-  LifetimeManagerSingletonImpl()
-      : logger_initialized_(false),
-        termination_initiated_(false),
-        termination_initiated_atomic_(*termination_initiated_.MutableScopedAccessor()) {}
-
   void SetLogger(std::function<void(std::string const&)> logger) const override {
-    logger_initialized_ = true;
+    extended_->logger_initialized_ = true;
     {
-      std::lock_guard lock(logger_mutex_);
-      logger_ = logger;
+      std::lock_guard lock(extended_->logger_mutex_);
+      extended_->logger_ = logger;
     }
   }
 
   void EnsureHasLogger() const {
-    if (!logger_initialized_) {
+    if (!extended_->logger_initialized_) {
       SetLogger([](std::string const& line) { std::cerr << "LIFETIME_MANAGER: " << line << std::endl; });
     }
   }
 
   size_t TrackingAdd(std::string const& description, char const* file, size_t line) override {
     EnsureHasLogger();
-    return tracking_.MutableUse([=](TrackedInstances& trk) {
+    return extended_->tracking_.MutableUse([=](TrackedInstances& trk) {
       uint64_t const id = trk.next_id_desc;
       --trk.next_id_desc;
       trk.still_alive[id] = LifetimeTrackedInstance(description, file, line);
@@ -98,7 +101,7 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
   }
 
   void TrackingRemove(size_t id) override {
-    tracking_.MutableUse([=](TrackedInstances& trk) { trk.still_alive.erase(id); });
+    extended_->tracking_.MutableUse([=](TrackedInstances& trk) { trk.still_alive.erase(id); });
   }
 
   // To run "global" threads instead of `.detach()`-ing them: these threads will be `.join()`-ed upon termination.
@@ -106,11 +109,11 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
   // (There is a mechanism to guard against this too, with the second possible `::abort()` clause, but still.)
   void EmplaceThreadImpl(std::thread t) override {
     EnsureHasLogger();
-    termination_initiated_.ImmutableUse([&](bool already_terminating) {
+    extended_->termination_initiated_.ImmutableUse([&](bool already_terminating) {
       // It's OK to just not start the thread if already in the "terminating" mode.
       if (!already_terminating) {
-        std::lock_guard lock(threads_to_join_mutex_);
-        threads_to_join_.emplace_back(std::move(t));
+        std::lock_guard lock(extended_->threads_to_join_mutex_);
+        extended_->threads_to_join_.emplace_back(std::move(t));
       }
     });
   }
@@ -118,10 +121,12 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
   [[nodiscard]] current::WaitableAtomicSubscriberScope SubscribeToTerminationEvent(std::function<void()> f0) override {
     EnsureHasLogger();
     // Ensures that `f0()` will only be called once, possibly from the very call to `SubscribeToTerminationEvent()`.
-    auto const f = [this, called = std::make_shared<current::WaitableAtomic<bool>>(false), f1 = std::move(f0)]() {
+    auto const f = [borrowed_extended = current::Borrowed<OfExtendedLifetime>(extended_),
+                    called = std::make_shared<current::WaitableAtomic<bool>>(false),
+                    f1 = std::move(f0)]() {
       // Guard against spurious wakeups.
-      if (termination_initiated_atomic_ ||
-          termination_initiated_.ImmutableUse([](std::atomic_bool const& b) { return b.load(); })) {
+      if (borrowed_extended->termination_initiated_atomic_ ||
+          borrowed_extended->termination_initiated_.ImmutableUse([](std::atomic_bool const& b) { return b.load(); })) {
         // Guard against calling the user-provided `f0()` more than once.
         if (called->MutableUse([](bool& called_flag) {
               if (called_flag) {
@@ -135,10 +140,10 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
         }
       }
     };
-    auto result = termination_initiated_.Subscribe(f);
+    auto result = extended_->termination_initiated_.Subscribe(f);
     // Here it is safe to use `termination_initiated_atomic_`, since the guarantee provided is "at least once",
     // and, coupled with the `still_active` guard, it becomes "exactly once" for `f` to be called.
-    if (termination_initiated_atomic_) {
+    if (extended_->termination_initiated_atomic_) {
       f();
     }
     return result;
@@ -148,35 +153,36 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
     EnsureHasLogger();
     std::function<void(LifetimeTrackedInstance const&)> f =
         f0 != nullptr ? f0 : [this](LifetimeTrackedInstance const& s) { Log(s.ToShortString()); };
-    tracking_.ImmutableUse([&f](TrackedInstances const& trk) {
+    extended_->tracking_.ImmutableUse([&f](TrackedInstances const& trk) {
       for (auto const& [_, s] : trk.still_alive) {
         f(s);
       }
     });
   }
 
-  bool IsShuttingDown() const override { return termination_initiated_atomic_; }
+  bool IsShuttingDown() const override { return extended_->termination_initiated_atomic_; }
 
   void WaitUntilTimeToDie() const override {
     EnsureHasLogger();
-    termination_initiated_.Wait();
+    extended_->termination_initiated_.Wait();
   }
 
   bool WaitUntilTimeToDieFor(std::chrono::microseconds dt) const override {
     EnsureHasLogger();
-    termination_initiated_.WaitFor(dt);
-    return !termination_initiated_atomic_;
+    extended_->termination_initiated_.WaitFor(dt);
+    return !extended_->termination_initiated_atomic_;
   }
 
   void DoExit(int exit_code = 0, std::chrono::milliseconds graceful_delay = std::chrono::seconds(2)) {
     auto const t0 = current::time::Now();
-    std::map<uint64_t, LifetimeTrackedInstance> original_still_alive = tracking_.ImmutableScopedAccessor()->still_alive;
+    std::map<uint64_t, LifetimeTrackedInstance> original_still_alive =
+        extended_->tracking_.ImmutableScopedAccessor()->still_alive;
     std::vector<uint64_t> still_alive_ids;
     for (auto const& e : original_still_alive) {
       still_alive_ids.push_back(e.first);
     }
     bool ok = false;
-    tracking_.WaitFor(
+    extended_->tracking_.WaitFor(
         [this, &ok, &original_still_alive, &still_alive_ids, t0](TrackedInstances const& trk) {
           std::vector<uint64_t> next_still_alive_ids;
           auto const t1 = current::time::Now();
@@ -207,8 +213,8 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
     if (ok) {
       Log("Main termination sequence successful, joining the presumably-done threads.");
       std::vector<std::thread> threads_to_join = [this]() {
-        std::lock_guard lock(threads_to_join_mutex_);
-        return std::move(threads_to_join_);
+        std::lock_guard lock(extended_->threads_to_join_mutex_);
+        return std::move(extended_->threads_to_join_);
       }();
       current::WaitableAtomic<bool> threads_joined_successfully(false);
       std::thread threads_joiner([&threads_to_join, &threads_joined_successfully]() {
@@ -243,7 +249,7 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
     } else {
       Log("");
       Log("Termination sequence unsuccessful, still has offenders.");
-      tracking_.ImmutableUse([this](TrackedInstances const& trk) {
+      extended_->tracking_.ImmutableUse([this](TrackedInstances const& trk) {
         for (auto const& [_, s] : trk.still_alive) {
           Log("Offender: " + s.ToShortString());
         }
@@ -255,7 +261,7 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
   }
 
   void Exit(int exit_code = 0, std::chrono::milliseconds graceful_delay = std::chrono::seconds(2)) override {
-    bool const previous_value = termination_initiated_.MutableUse([](std::atomic_bool& already_terminating) {
+    bool const previous_value = extended_->termination_initiated_.MutableUse([](std::atomic_bool& already_terminating) {
       bool const retval = already_terminating.load();
       already_terminating = true;
       return retval;
@@ -270,15 +276,15 @@ class LifetimeManagerSingletonImpl : public LifetimeManagerSingletonInterface {
   }
 
   ~LifetimeManagerSingletonImpl() {
-    bool const previous_value = termination_initiated_.MutableUse([](std::atomic_bool& already_terminating) {
+    bool const previous_value = extended_->termination_initiated_.MutableUse([](std::atomic_bool& already_terminating) {
       bool const retval = already_terminating.load();
       already_terminating = true;
       return retval;
     });
-
     if (!previous_value) {
       Log("");
       Log("The program is terminating organically.");
+
       organic_exit_ = true;
       DoExit();
     }
