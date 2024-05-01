@@ -135,7 +135,6 @@ class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLinkAndPublish 
   std::mutex mutex_;
 
   std::unordered_map<EventsSubscriberID, std::unordered_set<TopicID>> s_;
-  std::unordered_map<TopicID, std::unordered_map<EventsSubscriberID, std::function<void(std::shared_ptr<T>)>>> m1_;
   std::unordered_map<TopicID,
                      std::unordered_map<EventsSubscriberID, std::function<void(std::shared_ptr<crnt::CurrentSuper>)>>>
       m2_;
@@ -144,12 +143,6 @@ class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLinkAndPublish 
   TopicsSubcribersPerTypeSingleton() : ids_used_(0ull) {}
 
   EventsSubscriberID AllocateNextID() { return static_cast<EventsSubscriberID>(++ids_used_); }
-
-  void AddLink(EventsSubscriberID sid, TopicID tid, std::function<void(std::shared_ptr<T>)> f) {
-    std::lock_guard lock(mutex_);
-    s_[sid].insert(tid);
-    m1_[tid][sid] = std::move(f);
-  }
 
   void AddGenericLink(EventsSubscriberID sid,
                       TopicID tid,
@@ -163,43 +156,13 @@ class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLinkAndPublish 
   void CleanupSubscriberByID(EventsSubscriberID sid) override {
     std::lock_guard lock(mutex_);
     for (TopicID tid : s_[sid]) {
-      m1_[tid].erase(sid);
       m2_[tid].erase(sid);
     }
     s_.erase(sid);
   }
 
-  void PublishEvent(TopicID tid, std::shared_ptr<T> event) {
-    std::lock_guard lock(mutex_);
-    for (auto const& e : m1_[tid]) {
-      // NOTE(dkorolev): This `.second` should just quickly add a `shared_ptr` to the queue.
-      // TODO(dkorolev): Maybe make it more explicit from the code, since a lambda is ambiguous.
-      e.second(event);
-    }
-    auto e2 = std::dynamic_pointer_cast<crnt::CurrentSuper>(event);
-    if (!e2) {
-      std::cerr << "FATAL: Event type mismatch." << std::endl;
-      ::abort();
-    }
-    for (auto const& e : m2_[tid]) {
-      // NOTE(dkorolev): This `.second` should just quickly add a `shared_ptr` to the queue.
-      // TODO(dkorolev): Maybe make it more explicit from the code, since a lambda is ambiguous.
-      e.second(e2);
-    }
-  }
-
   void PublishGenericEvent(TopicID tid, std::shared_ptr<crnt::CurrentSuper> e2) override {
-    auto event = std::dynamic_pointer_cast<T>(e2);
-    if (!e2) {
-      std::cerr << "FATAL: Event type mismatch." << std::endl;
-      ::abort();
-    }
     std::lock_guard lock(mutex_);
-    for (auto const& e : m1_[tid]) {
-      // NOTE(dkorolev): This `.second` should just quickly add a `shared_ptr` to the queue.
-      // TODO(dkorolev): Maybe make it more explicit from the code, since a lambda is ambiguous.
-      e.second(event);
-    }
     for (auto const& e : m2_[tid]) {
       // NOTE(dkorolev): This `.second` should just quickly add a `shared_ptr` to the queue.
       // TODO(dkorolev): Maybe make it more explicit from the code, since a lambda is ambiguous.
