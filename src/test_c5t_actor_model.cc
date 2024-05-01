@@ -119,7 +119,7 @@ TEST(ActorModelTest, StaticAsserts) {
 }
 
 template <char C>
-struct TestEvent {
+struct TestEvent : crnt::CurrentSuper {
   int x;
   TestEvent(int x = 0) : x(x) {}
 };

@@ -16,6 +16,8 @@
 // TODO: even more reasons for a `.cc` file!
 #include "bricks/sync/owned_borrowed.h"
 
+#include "typesystem/types.h"  // For `crnt::CurrentSuper`.
+
 enum class TopicID : uint64_t {};
 class TopicIDGenerator final {
  private:
@@ -124,7 +126,10 @@ class TopicsSubcribersPerTypeSingleton final : public SubscribersCleanupLogic {
   std::mutex mutex_;
 
   std::unordered_map<EventsSubscriberID, std::unordered_set<TopicID>> s_;
-  std::unordered_map<TopicID, std::unordered_map<EventsSubscriberID, std::function<void(std::shared_ptr<T>)>>> m_;
+  std::unordered_map<TopicID, std::unordered_map<EventsSubscriberID, std::function<void(std::shared_ptr<T>)>>> m1_;
+  std::unordered_map<TopicID,
+                     std::unordered_map<EventsSubscriberID, std::function<void(std::shared_ptr<crnt::CurrentSuper>)>>>
+      m2_;
 
  public:
   TopicsSubcribersPerTypeSingleton() : ids_used_(0ull) {}
@@ -134,23 +139,40 @@ class TopicsSubcribersPerTypeSingleton final : public SubscribersCleanupLogic {
   void AddLink(EventsSubscriberID sid, TopicID tid, std::function<void(std::shared_ptr<T>)> f) {
     std::lock_guard lock(mutex_);
     s_[sid].insert(tid);
-    m_[tid][sid] = std::move(f);
+    m1_[tid][sid] = std::move(f);
+  }
+
+  void AddGenericLink(EventsSubscriberID sid, TopicID tid, std::function<void(std::shared_ptr<crnt::CurrentSuper>)> f) {
+    std::lock_guard lock(mutex_);
+    s_[sid].insert(tid);
+    m2_[tid][sid] = std::move(f);
   }
 
   void CleanupSubscriberByID(EventsSubscriberID sid) override {
     std::lock_guard lock(mutex_);
     for (TopicID tid : s_[sid]) {
-      m_[tid].erase(sid);
+      m1_[tid].erase(sid);
+      m2_[tid].erase(sid);
     }
     s_.erase(sid);
   }
 
   void PublishEvent(TopicID tid, std::shared_ptr<T> event) {
     std::lock_guard lock(mutex_);
-    for (auto const& e : m_[tid]) {
+    for (auto const& e : m1_[tid]) {
       // NOTE(dkorolev): This `.second` should just quickly add a `shared_ptr` to the queue.
       // TODO(dkorolev): Maybe make it more explicit from the code, since a lambda is ambiguous.
       e.second(event);
+    }
+    auto e2 = std::dynamic_pointer_cast<crnt::CurrentSuper>(event);
+    if (!e2) {
+      std::cerr << "FATAL: Event type mismatch." << std::endl;
+      ::abort();
+    }
+    for (auto const& e : m2_[tid]) {
+      // NOTE(dkorolev): This `.second` should just quickly add a `shared_ptr` to the queue.
+      // TODO(dkorolev): Maybe make it more explicit from the code, since a lambda is ambiguous.
+      e.second(e2);
     }
   }
 };
@@ -297,8 +319,15 @@ struct SubscribeAllImpl<T, TS...> {
     for (TopicID tid : ids) {
       auto& s = current::Singleton<TopicsSubcribersPerTypeSingleton<T>>();
       current::Singleton<TopicsSubcribersAllTypesSingleton>().RegisterTypeForSubscriber<T>(scope.GetUniqueID(), s);
-      s.AddLink(
-          scope.GetUniqueID(), tid, [&scope](std::shared_ptr<T> e) { scope.template EnqueueEvent<T>(std::move(e)); });
+      s.AddGenericLink(scope.GetUniqueID(), tid, [&scope](std::shared_ptr<crnt::CurrentSuper> e) {
+        std::shared_ptr<T> e2(std::dynamic_pointer_cast<T>(std::move(e)));
+        if (e2) {
+          scope.template EnqueueEvent<T>(std::move(e2));
+        } else {
+          std::cerr << "FATAL: Event type mismatch." << std::endl;
+          ::abort();
+        }
+      });
     }
     SubscribeAllImpl<TS...>::DoSubscribeAll(scope, topics);
   }

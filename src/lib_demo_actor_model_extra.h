@@ -1,8 +1,9 @@
 #pragma once
 
 #include "lib_c5t_actor_model.h"
+#include "typesystem/types.h"
 
-struct TimerEvent final {
+struct TimerEvent final : crnt::CurrentSuper {
   uint32_t const i;
 
   TimerEvent() = delete;
@@ -12,7 +13,7 @@ struct TimerEvent final {
   TimerEvent(uint32_t i) : i(i) {}
 };
 
-struct InputEvent final {
+struct InputEvent final : crnt::CurrentSuper {
   std::string const s;
 
   InputEvent() = delete;
