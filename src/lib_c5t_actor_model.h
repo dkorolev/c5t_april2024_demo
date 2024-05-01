@@ -16,13 +16,7 @@
 #include "typesystem/types.h"  // For `crnt::CurrentSuper`.
 
 enum class TopicID : uint64_t {};
-class TopicIDGenerator final {
- private:
-  std::atomic_uint64_t next_topic_id = 0ull;
-
- public:
-  TopicID GetNextUniqueTopicID() { return static_cast<TopicID>(next_topic_id++); }
-};
+TopicID GetNextUniqueTopicID();
 
 template <class T>
 struct TopicKeysOfType {
@@ -42,7 +36,7 @@ class TopicKey final {
   TopicKey() = delete;
 
  public:
-  TopicKey(ConstructTopicKey) : id_(current::Singleton<TopicIDGenerator>().GetNextUniqueTopicID()) {}
+  TopicKey(ConstructTopicKey) : id_(GetNextUniqueTopicID()) {}
   TopicID GetTopicID() const { return id_; }
   operator TopicID() const { return GetTopicID(); }
 
@@ -99,52 +93,11 @@ class ICleanupWithBenefits : public ICleanup {
                                                  EventsSubscriberID sid,
                                                  ICleanup& respective_singleton_instance) = 0;
   virtual EventsSubscriberID AllocateNextID() = 0;
+  virtual ICleanupAndLinkAndPublish& HandlerPerType(std::type_index) = 0;
 };
 
 ICleanupWithBenefits& TMP_ActorModelSingleton();
 
-template <typename T>
-class TopicsSubcribersPerTypeSingleton final : public ICleanupAndLinkAndPublish {
- private:
-  std::atomic_uint64_t ids_used_;
-  std::mutex mutex_;
-
-  std::unordered_map<EventsSubscriberID, std::unordered_set<TopicID>> s_;
-  std::unordered_map<TopicID,
-                     std::unordered_map<EventsSubscriberID, std::function<void(std::shared_ptr<crnt::CurrentSuper>)>>>
-      m2_;
-
- public:
-  TopicsSubcribersPerTypeSingleton() : ids_used_(0ull) {}
-
-  EventsSubscriberID AllocateNextID() { return static_cast<EventsSubscriberID>(++ids_used_); }
-
-  void AddGenericLink(EventsSubscriberID sid,
-                      TopicID tid,
-                      std::function<void(std::shared_ptr<crnt::CurrentSuper>)> f) override {
-    TMP_ActorModelSingleton().InternalRegisterTypeForSubscriber(std::type_index(typeid(T)), sid, *this);
-    std::lock_guard lock(mutex_);
-    s_[sid].insert(tid);
-    m2_[tid][sid] = std::move(f);
-  }
-
-  void CleanupSubscriberByID(EventsSubscriberID sid) override {
-    std::lock_guard lock(mutex_);
-    for (TopicID tid : s_[sid]) {
-      m2_[tid].erase(sid);
-    }
-    s_.erase(sid);
-  }
-
-  void PublishGenericEvent(TopicID tid, std::shared_ptr<crnt::CurrentSuper> e2) override {
-    std::lock_guard lock(mutex_);
-    for (auto const& e : m2_[tid]) {
-      // NOTE(dkorolev): This `.second` should just quickly add a `shared_ptr` to the queue.
-      // TODO(dkorolev): Maybe make it more explicit from the code, since a lambda is ambiguous.
-      e.second(e2);
-    }
-  }
-};
 struct ConstructTopicsSubscriberScope final {};
 struct ConstructTopicsSubscriberScopeImpl final {};
 
@@ -283,7 +236,7 @@ struct SubscribeAllImpl<T, TS...> {
   static void DoSubscribeAll(SCOPE& scope, TOPICS& topics) {
     std::unordered_set<TopicID> const& ids = static_cast<TopicKeysOfType<T>&>(topics).topic_ids_;
     for (TopicID tid : ids) {
-      ICleanupAndLinkAndPublish& s = current::Singleton<TopicsSubcribersPerTypeSingleton<T>>();
+      ICleanupAndLinkAndPublish& s = TMP_ActorModelSingleton().HandlerPerType(std::type_index(typeid(T)));
       s.AddGenericLink(scope.GetUniqueID(), tid, [&scope](std::shared_ptr<crnt::CurrentSuper> e) {
         std::shared_ptr<T> e2(std::dynamic_pointer_cast<T>(std::move(e)));
         if (e2) {
@@ -391,7 +344,7 @@ class NullableActorSubscriberScope final {
 
 template <class T, class... ARGS>
 void EmitEventTo(TopicID tid, std::shared_ptr<T> event) {
-  ICleanupAndLinkAndPublish& s = current::Singleton<TopicsSubcribersPerTypeSingleton<T>>();
+  ICleanupAndLinkAndPublish& s = TMP_ActorModelSingleton().HandlerPerType(std::type_index(typeid(T)));
   s.PublishGenericEvent(tid, std::move(event));
 }
 
