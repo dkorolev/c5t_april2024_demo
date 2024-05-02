@@ -196,8 +196,7 @@ TEST(ActorModelTest, InjectedFromDLib) {
   };
 
   std::ostringstream oss;
-  // TODO: (t+t) is ugly ...
-  ActorSubscriberScope const s = C5T_SUBSCRIBE<TestWorker>(t + t, oss);
+  ActorSubscriberScope const s = C5T_SUBSCRIBE<TestWorker>(t, oss);
 
   C5T_DLIB_CALL("test_actor_model",
                 [&](C5T_DLib& dlib) { dlib.CallVoid<void(IDLib&, TopicID)>("ExternalEmitter", iam, t.GetTopicID()); });

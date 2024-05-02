@@ -397,7 +397,7 @@ struct C5T_SUBSCRIBE_IMPL;
 template <class W, class... TOPICS_TS>
 struct C5T_SUBSCRIBE_IMPL<W, TopicKeys<TOPICS_TS...>> final {
   template <typename... ARGS>
-  [[nodiscard]] static ActorSubscriberScopeFor<W> DO_C5T_SUBSCRIBE(TopicKeys<TOPICS_TS...> const&& topics,
+  [[nodiscard]] static ActorSubscriberScopeFor<W> DO_C5T_SUBSCRIBE(TopicKeys<TOPICS_TS...> const& topics,
                                                                    ARGS&&... args) {
     return topics.template InternalSubscribeTo<W>(std::forward<ARGS>(args)...);
   }
@@ -406,13 +406,13 @@ struct C5T_SUBSCRIBE_IMPL<W, TopicKeys<TOPICS_TS...>> final {
 template <class W, class TOPIC_T>
 struct C5T_SUBSCRIBE_IMPL<W, TopicKey<TOPIC_T>> final {
   template <typename... ARGS>
-  [[nodiscard]] static ActorSubscriberScopeFor<W> DO_C5T_SUBSCRIBE(TopicKey<TOPIC_T> const&& topics, ARGS&&... args) {
+  [[nodiscard]] static ActorSubscriberScopeFor<W> DO_C5T_SUBSCRIBE(TopicKey<TOPIC_T> const& topics, ARGS&&... args) {
     return (+topics).template InternalSubscribeTo<W>(std::forward<ARGS>(args)...);
   }
 };
 
 template <class W, class TOPICS, typename... ARGS>
 [[nodiscard]] ActorSubscriberScopeFor<W> C5T_SUBSCRIBE(TOPICS&& topics, ARGS&&... args) {
-  return C5T_SUBSCRIBE_IMPL<W, TOPICS>::template DO_C5T_SUBSCRIBE(std::forward<TOPICS>(topics),
-                                                                  std::forward<ARGS>(args)...);
+  return C5T_SUBSCRIBE_IMPL<W, std::decay_t<TOPICS>>::template DO_C5T_SUBSCRIBE(std::forward<TOPICS>(topics),
+                                                                                std::forward<ARGS>(args)...);
 }
