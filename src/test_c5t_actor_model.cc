@@ -144,22 +144,22 @@ TEST(ActorModelTest, Smoke) {
 
   {
     std::ostringstream oss;
-    ActorSubscriberScope const s1 = (a1 + a2).NewSubscribeTo<TestWorker>(oss);
-    EmitTo<TestEvent<'a'>>(a1, 101);
-    EmitTo<TestEvent<'a'>>(a2, 102);
-    EmitTo<TestEvent<'a'>>(a3, 103);
+    ActorSubscriberScope const s1 = C5T_SUBSCRIBE<TestWorker>(a1 + a2, oss);
+    C5T_EMIT<TestEvent<'a'>>(a1, 101);
+    C5T_EMIT<TestEvent<'a'>>(a2, 102);
+    C5T_EMIT<TestEvent<'a'>>(a3, 103);
     C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
     EXPECT_EQ("a101a102", oss.str());
     // TODO: emitting the wrong type should be a compilation error, no?
-    EmitTo<TestEvent<'b'>>(b1, 201);
-    EmitTo<TestEvent<'b'>>(b2, 202);
-    EmitTo<TestEvent<'b'>>(b3, 203);
+    C5T_EMIT<TestEvent<'b'>>(b1, 201);
+    C5T_EMIT<TestEvent<'b'>>(b2, 202);
+    C5T_EMIT<TestEvent<'b'>>(b3, 203);
     C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
     EXPECT_EQ("a101a102", oss.str());
-    ActorSubscriberScope const s2 = (b1 + b2).NewSubscribeTo<TestWorker>(oss);
-    EmitTo<TestEvent<'b'>>(b1, 301);
-    EmitTo<TestEvent<'b'>>(b2, 302);
-    EmitTo<TestEvent<'b'>>(b3, 303);
+    ActorSubscriberScope const s2 = C5T_SUBSCRIBE<TestWorker>(b1 + b2, oss);
+    C5T_EMIT<TestEvent<'b'>>(b1, 301);
+    C5T_EMIT<TestEvent<'b'>>(b2, 302);
+    C5T_EMIT<TestEvent<'b'>>(b3, 303);
     C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
     EXPECT_EQ("a101a102b301b302", oss.str());
   }
@@ -172,6 +172,11 @@ TEST(ActorModelTest, InjectedFromDLib) {
       0, C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<int()>("NonExistent"); }));
 
   IActorModel iam(C5T_ACTOR_MODEL_INSTANCE());
+
+  C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) {
+    return dlib.CallVoid<void(IDLib&, int)>("InitAndResetEmitterCounter", iam, 42);
+  });
+
   auto const t = Topic<Event_DL2TEST>("topic_from_dlib");
 
   struct TestWorker final {
@@ -191,8 +196,7 @@ TEST(ActorModelTest, InjectedFromDLib) {
   };
 
   std::ostringstream oss;
-  // TODO: (t+t) is ugly ...
-  ActorSubscriberScope const s = (t + t).NewSubscribeTo<TestWorker>(oss);
+  ActorSubscriberScope const s = C5T_SUBSCRIBE<TestWorker>(t, oss);
 
   C5T_DLIB_CALL("test_actor_model",
                 [&](C5T_DLib& dlib) { dlib.CallVoid<void(IDLib&, TopicID)>("ExternalEmitter", iam, t.GetTopicID()); });
@@ -208,4 +212,29 @@ TEST(ActorModelTest, InjectedFromDLib) {
 
   C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
   EXPECT_EQ("42,43,44", oss.str());
+
+  C5T_DLIB_CALL("test_actor_model",
+                [&](C5T_DLib& dlib) { dlib.CallVoid<void(TopicID)>("ExternalSubscriberCreate", t.GetTopicID()); });
+
+  EXPECT_EQ("", C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) {
+              return dlib.CallOrDefault<std::string()>("ExternalSubscriberData");
+            }));
+
+  C5T_EMIT<Event_DL2TEST>(t, 101);
+  C5T_EMIT<Event_DL2TEST>(t, 201);
+  C5T_EMIT<Event_DL2TEST>(t, 301);
+
+  C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
+  EXPECT_EQ("101,201,301", C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) {
+              return dlib.CallOrDefault<std::string()>("ExternalSubscriberData");
+            }));
+
+  C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) { dlib.CallVoid<void()>("ExternalSubscriberTerminate"); });
+
+  C5T_EMIT<Event_DL2TEST>(t, 401);
+
+  C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
+  EXPECT_EQ("101,201,301", C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) {
+              return dlib.CallOrDefault<std::string()>("ExternalSubscriberData");
+            }));
 }

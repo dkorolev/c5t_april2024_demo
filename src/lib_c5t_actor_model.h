@@ -6,10 +6,10 @@
 #include <typeindex>
 #include <unordered_set>
 
-#include "lib_c5t_lifetime_manager.h"
-
 // TODO: even more reasons for a `.cc` file!
+#include "bricks/sync/waitable_atomic.h"
 #include "bricks/sync/owned_borrowed.h"
+#include "bricks/util/singleton.h"
 
 #include "typesystem/types.h"  // For `crnt::CurrentSuper`.
 
@@ -35,6 +35,8 @@ class TopicKey final {
 
  public:
   TopicKey(ConstructTopicKey) : id_(GetNextUniqueTopicID()) {}
+  TopicKey(ConstructTopicKey, TopicID id) : id_(id) {}
+  static TopicKey FromID(TopicID id) { return TopicKey(ConstructTopicKey(), id); }
   TopicID GetTopicID() const { return id_; }
   operator TopicID() const { return GetTopicID(); }
 
@@ -148,8 +150,7 @@ class ActorSubscriberScopeForImpl final : public ActorSubscriberScopeImpl {
     }
 
     void Thread() {
-      auto const scope_term = C5T_LIFETIME_MANAGER_NOTIFY_OF_SHUTDOWN(
-          [this]() { wa.MutableUse([](ActorModelQueue& q) { q.done = true; }); });
+      // NOTE: it's on the user to stop subscriptions if the application is terminating
       while (true) {
         using r_t = std::pair<std::vector<std::function<void()>>, bool>;
         r_t const w = wa.Wait([](ActorModelQueue const& q) { return q.done || !q.fifo.empty(); },
@@ -248,7 +249,7 @@ template <class T, class... TS>
 struct SubscribeAllImpl<T, TS...> {
   template <class SCOPE, class TOPICS>
   static void DoSubscribeAll(SCOPE& scope, TOPICS& topics) {
-    std::unordered_set<TopicID> const& ids = static_cast<TopicKeysOfType<T>&>(topics).topic_ids_;
+    std::unordered_set<TopicID> const& ids = static_cast<TopicKeysOfType<T> const&>(topics).topic_ids_;
     for (TopicID tid : ids) {
       ICleanupAndLinkAndPublish& s = C5T_ACTOR_MODEL_INSTANCE().HandlerPerType(std::type_index(typeid(T)));
       s.AddGenericLink(scope.GetUniqueID(), tid, [&scope](std::shared_ptr<crnt::CurrentSuper> e) {
@@ -294,15 +295,15 @@ struct TopicKeys : TopicKeysOfType<TS>... {
   }
 
   template <class W>
-  [[nodiscard]] ActorSubscriberScopeFor<W> NewSubscribeWorkerTo(std::unique_ptr<W> worker) {
+  [[nodiscard]] ActorSubscriberScopeFor<W> InternalSubscribeWorkerTo(std::unique_ptr<W> worker) const {
     ActorSubscriberScopeFor<W> res(ConstructTopicsSubscriberScope(), std::move(worker));
     SubscribeAllImpl<TS...>::DoSubscribeAll(res.ExtractImpl(), *this);
     return res;
   }
 
   template <class W, typename... ARGS>
-  [[nodiscard]] ActorSubscriberScopeFor<W> NewSubscribeTo(ARGS&&... args) {
-    return NewSubscribeWorkerTo<W>(std::make_unique<W>(std::forward<ARGS>(args)...));
+  [[nodiscard]] ActorSubscriberScopeFor<W> InternalSubscribeTo(ARGS&&... args) const {
+    return InternalSubscribeWorkerTo<W>(std::make_unique<W>(std::forward<ARGS>(args)...));
   }
 };
 
@@ -338,6 +339,7 @@ class NullableActorSubscriberScope final {
 
  public:
   NullableActorSubscriberScope() = default;
+  NullableActorSubscriberScope(std::nullptr_t) {}
   NullableActorSubscriberScope(NullableActorSubscriberScope&&) = default;
   NullableActorSubscriberScope& operator=(NullableActorSubscriberScope&&) = default;
 
@@ -357,14 +359,13 @@ class NullableActorSubscriberScope final {
 };
 
 template <class T, class... ARGS>
-void EmitEventTo(TopicID tid, std::shared_ptr<T> event) {
-  ICleanupAndLinkAndPublish& s = C5T_ACTOR_MODEL_INSTANCE().HandlerPerType(std::type_index(typeid(T)));
-  s.PublishGenericEvent(tid, std::move(event));
+void InternalEmitEventTo(TopicID tid, std::shared_ptr<T> event) {
+  C5T_ACTOR_MODEL_INSTANCE().HandlerPerType(std::type_index(typeid(T))).PublishGenericEvent(tid, std::move(event));
 }
 
 template <class T, class... ARGS>
-void EmitTo(TopicID tid, ARGS&&... args) {
-  EmitEventTo(tid, std::make_shared<T>(std::forward<ARGS>(args)...));
+void C5T_EMIT(TopicID tid, ARGS&&... args) {
+  InternalEmitEventTo(tid, std::make_shared<T>(std::forward<ARGS>(args)...));
 }
 
 inline void C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE() {
@@ -388,4 +389,30 @@ inline C5T_ACTOR_MODEL_Interface& C5T_ACTOR_MODEL_INSTANCE() {
 
 inline void C5T_ACTOR_MODEL_INJECT(C5T_ACTOR_MODEL_Interface& injected) {
   current::Singleton<ActorModelInjectableInstance>().p = &injected;
+}
+
+template <class W, class TOPICS>
+struct C5T_SUBSCRIBE_IMPL;
+
+template <class W, class... TOPICS_TS>
+struct C5T_SUBSCRIBE_IMPL<W, TopicKeys<TOPICS_TS...>> final {
+  template <typename... ARGS>
+  [[nodiscard]] static ActorSubscriberScopeFor<W> DO_C5T_SUBSCRIBE(TopicKeys<TOPICS_TS...> const& topics,
+                                                                   ARGS&&... args) {
+    return topics.template InternalSubscribeTo<W>(std::forward<ARGS>(args)...);
+  }
+};
+
+template <class W, class TOPIC_T>
+struct C5T_SUBSCRIBE_IMPL<W, TopicKey<TOPIC_T>> final {
+  template <typename... ARGS>
+  [[nodiscard]] static ActorSubscriberScopeFor<W> DO_C5T_SUBSCRIBE(TopicKey<TOPIC_T> const& topics, ARGS&&... args) {
+    return (+topics).template InternalSubscribeTo<W>(std::forward<ARGS>(args)...);
+  }
+};
+
+template <class W, class TOPICS, typename... ARGS>
+[[nodiscard]] ActorSubscriberScopeFor<W> C5T_SUBSCRIBE(TOPICS&& topics, ARGS&&... args) {
+  return C5T_SUBSCRIBE_IMPL<W, std::decay_t<TOPICS>>::template DO_C5T_SUBSCRIBE(std::forward<TOPICS>(topics),
+                                                                                std::forward<ARGS>(args)...);
 }
