@@ -7,9 +7,11 @@
 extern "C" int Smoke42() { return 42; }
 extern "C" std::string SmokeOK() { return "OK"; }
 
-inline int magic = 42;
+inline int magic = 0;
 
 // TODO: reset `magic`!
+extern "C" void ResetEmitterCounter(int value) { magic = value; }
+
 extern "C" void ExternalEmitter(IDLib& iface, TopicID tid) {
   iface.Use<IActorModel>([tid](IActorModel& am) {
     C5T_ACTOR_MODEL_INJECT(am.ActorModel());

@@ -195,6 +195,9 @@ TEST(ActorModelTest, InjectedFromDLib) {
   ActorSubscriberScope const s = (t + t).NewSubscribeTo<TestWorker>(oss);
 
   C5T_DLIB_CALL("test_actor_model",
+                [&](C5T_DLib& dlib) { return dlib.CallVoid<void(int)>("ResetEmitterCounter", 42); });
+
+  C5T_DLIB_CALL("test_actor_model",
                 [&](C5T_DLib& dlib) { dlib.CallVoid<void(IDLib&, TopicID)>("ExternalEmitter", iam, t.GetTopicID()); });
 
   C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
