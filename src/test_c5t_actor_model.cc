@@ -172,6 +172,11 @@ TEST(ActorModelTest, InjectedFromDLib) {
       0, C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<int()>("NonExistent"); }));
 
   IActorModel iam(C5T_ACTOR_MODEL_INSTANCE());
+
+  C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) {
+    return dlib.CallVoid<void(IDLib&, int)>("InitAndResetEmitterCounter", iam, 42);
+  });
+
   auto const t = Topic<Event_DL2TEST>("topic_from_dlib");
 
   struct TestWorker final {
@@ -193,9 +198,6 @@ TEST(ActorModelTest, InjectedFromDLib) {
   std::ostringstream oss;
   // TODO: (t+t) is ugly ...
   ActorSubscriberScope const s = (t + t).NewSubscribeTo<TestWorker>(oss);
-
-  C5T_DLIB_CALL("test_actor_model",
-                [&](C5T_DLib& dlib) { return dlib.CallVoid<void(int)>("ResetEmitterCounter", 42); });
 
   C5T_DLIB_CALL("test_actor_model",
                 [&](C5T_DLib& dlib) { dlib.CallVoid<void(IDLib&, TopicID)>("ExternalEmitter", iam, t.GetTopicID()); });
