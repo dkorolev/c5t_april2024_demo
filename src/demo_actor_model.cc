@@ -96,8 +96,8 @@ int main(int argc, char** argv) {
             void OnShutdown() {}
           };
 
-          ActorSubscriberScope const s1 = C5T_SUBSCRIBE(
-              topic_timer + topic_input, ChunksSender, stop_chunked_connection_thread, std::move(moved_r));
+          ActorSubscriberScope const s1 = C5T_SUBSCRIBE<ChunksSender>(
+              topic_timer + topic_input, stop_chunked_connection_thread, std::move(moved_r));
 
           auto const s2 =
               C5T_LIFETIME_MANAGER_NOTIFY_OF_SHUTDOWN([&]() { stop_chunked_connection_thread.SetValue(true); });

@@ -249,7 +249,7 @@ template <class T, class... TS>
 struct SubscribeAllImpl<T, TS...> {
   template <class SCOPE, class TOPICS>
   static void DoSubscribeAll(SCOPE& scope, TOPICS& topics) {
-    std::unordered_set<TopicID> const& ids = static_cast<TopicKeysOfType<T>&>(topics).topic_ids_;
+    std::unordered_set<TopicID> const& ids = static_cast<TopicKeysOfType<T> const&>(topics).topic_ids_;
     for (TopicID tid : ids) {
       ICleanupAndLinkAndPublish& s = C5T_ACTOR_MODEL_INSTANCE().HandlerPerType(std::type_index(typeid(T)));
       s.AddGenericLink(scope.GetUniqueID(), tid, [&scope](std::shared_ptr<crnt::CurrentSuper> e) {
@@ -295,14 +295,14 @@ struct TopicKeys : TopicKeysOfType<TS>... {
   }
 
   template <class W>
-  [[nodiscard]] ActorSubscriberScopeFor<W> InternalSubscribeWorkerTo(std::unique_ptr<W> worker) {
+  [[nodiscard]] ActorSubscriberScopeFor<W> InternalSubscribeWorkerTo(std::unique_ptr<W> worker) const {
     ActorSubscriberScopeFor<W> res(ConstructTopicsSubscriberScope(), std::move(worker));
     SubscribeAllImpl<TS...>::DoSubscribeAll(res.ExtractImpl(), *this);
     return res;
   }
 
   template <class W, typename... ARGS>
-  [[nodiscard]] ActorSubscriberScopeFor<W> InternalSubscribeTo(ARGS&&... args) {
+  [[nodiscard]] ActorSubscriberScopeFor<W> InternalSubscribeTo(ARGS&&... args) const {
     return InternalSubscribeWorkerTo<W>(std::make_unique<W>(std::forward<ARGS>(args)...));
   }
 };
@@ -392,4 +392,20 @@ inline void C5T_ACTOR_MODEL_INJECT(C5T_ACTOR_MODEL_Interface& injected) {
   current::Singleton<ActorModelInjectableInstance>().p = &injected;
 }
 
-#define C5T_SUBSCRIBE(topics, worker_t, ...) (topics).InternalSubscribeTo<worker_t>(__VA_ARGS__)
+template <class W, class TOPICS>
+struct C5T_SUBSCRIBE_IMPL;
+
+template <class W, class... TOPICS_TS>
+struct C5T_SUBSCRIBE_IMPL<W, TopicKeys<TOPICS_TS...>> final {
+  template <typename... ARGS>
+  [[nodiscard]] static ActorSubscriberScopeFor<W> DO_C5T_SUBSCRIBE(TopicKeys<TOPICS_TS...> const&& topics,
+                                                                   ARGS&&... args) {
+    return topics.template InternalSubscribeTo<W>(std::forward<ARGS>(args)...);
+  }
+};
+
+template <class W, class TOPICS, typename... ARGS>
+[[nodiscard]] ActorSubscriberScopeFor<W> C5T_SUBSCRIBE(TOPICS&& topics, ARGS&&... args) {
+  return C5T_SUBSCRIBE_IMPL<W, TOPICS>::template DO_C5T_SUBSCRIBE(std::forward<TOPICS>(topics),
+                                                                  std::forward<ARGS>(args)...);
+}

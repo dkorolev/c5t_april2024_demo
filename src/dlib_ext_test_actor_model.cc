@@ -41,7 +41,7 @@ extern "C" void ExternalEmitter(IDLib& iface, TopicID tid) {
 extern "C" void ExternalSubscriberCreate(TopicID tid) {
   // TODO: fix the ugliness
   auto t = TopicKey<Event_DL2TEST>::FromID(tid);
-  scope = C5T_SUBSCRIBE((t + t), DLibTestWorker, oss);
+  scope = C5T_SUBSCRIBE<DLibTestWorker>(t + t, oss);
 }
 
 extern "C" std::string ExternalSubscriberData() { return oss.str(); }

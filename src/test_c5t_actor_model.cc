@@ -144,7 +144,7 @@ TEST(ActorModelTest, Smoke) {
 
   {
     std::ostringstream oss;
-    ActorSubscriberScope const s1 = C5T_SUBSCRIBE((a1 + a2), TestWorker, oss);
+    ActorSubscriberScope const s1 = C5T_SUBSCRIBE<TestWorker>(a1 + a2, oss);
     EmitTo<TestEvent<'a'>>(a1, 101);
     EmitTo<TestEvent<'a'>>(a2, 102);
     EmitTo<TestEvent<'a'>>(a3, 103);
@@ -156,7 +156,7 @@ TEST(ActorModelTest, Smoke) {
     EmitTo<TestEvent<'b'>>(b3, 203);
     C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
     EXPECT_EQ("a101a102", oss.str());
-    ActorSubscriberScope const s2 = C5T_SUBSCRIBE((b1 + b2), TestWorker, oss);
+    ActorSubscriberScope const s2 = C5T_SUBSCRIBE<TestWorker>(b1 + b2, oss);
     EmitTo<TestEvent<'b'>>(b1, 301);
     EmitTo<TestEvent<'b'>>(b2, 302);
     EmitTo<TestEvent<'b'>>(b3, 303);
@@ -197,7 +197,7 @@ TEST(ActorModelTest, InjectedFromDLib) {
 
   std::ostringstream oss;
   // TODO: (t+t) is ugly ...
-  ActorSubscriberScope const s = C5T_SUBSCRIBE((t + t), TestWorker, oss);
+  ActorSubscriberScope const s = C5T_SUBSCRIBE<TestWorker>(t + t, oss);
 
   C5T_DLIB_CALL("test_actor_model",
                 [&](C5T_DLib& dlib) { dlib.CallVoid<void(IDLib&, TopicID)>("ExternalEmitter", iam, t.GetTopicID()); });
