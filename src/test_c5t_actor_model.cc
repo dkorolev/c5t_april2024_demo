@@ -145,21 +145,21 @@ TEST(ActorModelTest, Smoke) {
   {
     std::ostringstream oss;
     ActorSubscriberScope const s1 = C5T_SUBSCRIBE<TestWorker>(a1 + a2, oss);
-    EmitTo<TestEvent<'a'>>(a1, 101);
-    EmitTo<TestEvent<'a'>>(a2, 102);
-    EmitTo<TestEvent<'a'>>(a3, 103);
+    C5T_EMIT<TestEvent<'a'>>(a1, 101);
+    C5T_EMIT<TestEvent<'a'>>(a2, 102);
+    C5T_EMIT<TestEvent<'a'>>(a3, 103);
     C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
     EXPECT_EQ("a101a102", oss.str());
     // TODO: emitting the wrong type should be a compilation error, no?
-    EmitTo<TestEvent<'b'>>(b1, 201);
-    EmitTo<TestEvent<'b'>>(b2, 202);
-    EmitTo<TestEvent<'b'>>(b3, 203);
+    C5T_EMIT<TestEvent<'b'>>(b1, 201);
+    C5T_EMIT<TestEvent<'b'>>(b2, 202);
+    C5T_EMIT<TestEvent<'b'>>(b3, 203);
     C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
     EXPECT_EQ("a101a102", oss.str());
     ActorSubscriberScope const s2 = C5T_SUBSCRIBE<TestWorker>(b1 + b2, oss);
-    EmitTo<TestEvent<'b'>>(b1, 301);
-    EmitTo<TestEvent<'b'>>(b2, 302);
-    EmitTo<TestEvent<'b'>>(b3, 303);
+    C5T_EMIT<TestEvent<'b'>>(b1, 301);
+    C5T_EMIT<TestEvent<'b'>>(b2, 302);
+    C5T_EMIT<TestEvent<'b'>>(b3, 303);
     C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
     EXPECT_EQ("a101a102b301b302", oss.str());
   }
@@ -221,9 +221,9 @@ TEST(ActorModelTest, InjectedFromDLib) {
               return dlib.CallOrDefault<std::string()>("ExternalSubscriberData");
             }));
 
-  EmitTo<Event_DL2TEST>(t, 101);
-  EmitTo<Event_DL2TEST>(t, 201);
-  EmitTo<Event_DL2TEST>(t, 301);
+  C5T_EMIT<Event_DL2TEST>(t, 101);
+  C5T_EMIT<Event_DL2TEST>(t, 201);
+  C5T_EMIT<Event_DL2TEST>(t, 301);
 
   C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
   EXPECT_EQ("101,201,301", C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) {
@@ -232,7 +232,7 @@ TEST(ActorModelTest, InjectedFromDLib) {
 
   C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) { dlib.CallVoid<void()>("ExternalSubscriberTerminate"); });
 
-  EmitTo<Event_DL2TEST>(t, 401);
+  C5T_EMIT<Event_DL2TEST>(t, 401);
 
   C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
   EXPECT_EQ("101,201,301", C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) {

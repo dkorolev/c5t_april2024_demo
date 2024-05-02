@@ -35,7 +35,7 @@ extern "C" void InitAndResetEmitterCounter(IDLib& iface, int value) {
 }
 
 extern "C" void ExternalEmitter(IDLib& iface, TopicID tid) {
-  iface.Use<IActorModel>([tid](IActorModel& am) { EmitTo<Event_DL2TEST>(tid, magic++); });
+  iface.Use<IActorModel>([tid](IActorModel& am) { C5T_EMIT<Event_DL2TEST>(tid, magic++); });
 }
 
 extern "C" void ExternalSubscriberCreate(TopicID tid) {

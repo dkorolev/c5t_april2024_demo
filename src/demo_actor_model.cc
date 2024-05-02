@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
       std::cout << "Enter whatever: " << std::flush;
       std::string s;
       std::getline(std::cin, s);
-      EmitTo<InputEvent>(topic_input, s);
+      C5T_EMIT<InputEvent>(topic_input, s);
       std::cout << "Line sent to all chunk HTTP listeners: " << s << std::endl;
     }
   });

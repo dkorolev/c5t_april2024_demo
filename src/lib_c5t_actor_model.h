@@ -359,14 +359,13 @@ class NullableActorSubscriberScope final {
 };
 
 template <class T, class... ARGS>
-void EmitEventTo(TopicID tid, std::shared_ptr<T> event) {
-  ICleanupAndLinkAndPublish& s = C5T_ACTOR_MODEL_INSTANCE().HandlerPerType(std::type_index(typeid(T)));
-  s.PublishGenericEvent(tid, std::move(event));
+void InternalEmitEventTo(TopicID tid, std::shared_ptr<T> event) {
+  C5T_ACTOR_MODEL_INSTANCE().HandlerPerType(std::type_index(typeid(T))).PublishGenericEvent(tid, std::move(event));
 }
 
 template <class T, class... ARGS>
-void EmitTo(TopicID tid, ARGS&&... args) {
-  EmitEventTo(tid, std::make_shared<T>(std::forward<ARGS>(args)...));
+void C5T_EMIT(TopicID tid, ARGS&&... args) {
+  InternalEmitEventTo(tid, std::make_shared<T>(std::forward<ARGS>(args)...));
 }
 
 inline void C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE() {
@@ -401,6 +400,14 @@ struct C5T_SUBSCRIBE_IMPL<W, TopicKeys<TOPICS_TS...>> final {
   [[nodiscard]] static ActorSubscriberScopeFor<W> DO_C5T_SUBSCRIBE(TopicKeys<TOPICS_TS...> const&& topics,
                                                                    ARGS&&... args) {
     return topics.template InternalSubscribeTo<W>(std::forward<ARGS>(args)...);
+  }
+};
+
+template <class W, class TOPIC_T>
+struct C5T_SUBSCRIBE_IMPL<W, TopicKey<TOPIC_T>> final {
+  template <typename... ARGS>
+  [[nodiscard]] static ActorSubscriberScopeFor<W> DO_C5T_SUBSCRIBE(TopicKey<TOPIC_T> const&& topics, ARGS&&... args) {
+    return (+topics).template InternalSubscribeTo<W>(std::forward<ARGS>(args)...);
   }
 };
 

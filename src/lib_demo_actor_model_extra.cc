@@ -6,7 +6,7 @@ void StartTimerThread(TopicKey<TimerEvent> topic_timer) {
   C5T_LIFETIME_MANAGER_TRACKED_THREAD("timer", [topic_timer]() {
     int i = 0;
     while (C5T_LIFETIME_MANAGER_SLEEP_FOR(std::chrono::milliseconds(1000))) {
-      EmitTo<TimerEvent>(topic_timer, ++i);
+      C5T_EMIT<TimerEvent>(topic_timer, ++i);
     }
   });
 }
