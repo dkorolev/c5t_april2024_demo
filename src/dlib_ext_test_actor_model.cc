@@ -1,6 +1,6 @@
 #include "lib_c5t_dlib.h"
 #include "lib_c5t_actor_model.h"
-#include "lib_test_actor_model.h"  // IWYU pragma: keep
+#include "lib_test_actor_model.h"
 
 #include <sstream>
 #include <string>
