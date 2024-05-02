@@ -211,4 +211,29 @@ TEST(ActorModelTest, InjectedFromDLib) {
 
   C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
   EXPECT_EQ("42,43,44", oss.str());
+
+  C5T_DLIB_CALL("test_actor_model",
+                [&](C5T_DLib& dlib) { dlib.CallVoid<void(TopicID)>("ExternalSubscriberCreate", t.GetTopicID()); });
+
+  EXPECT_EQ("", C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) {
+              return dlib.CallOrDefault<std::string()>("ExternalSubscriberData");
+            }));
+
+  EmitTo<Event_DL2TEST>(t, 101);
+  EmitTo<Event_DL2TEST>(t, 201);
+  EmitTo<Event_DL2TEST>(t, 301);
+
+  C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
+  EXPECT_EQ("101,201,301", C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) {
+              return dlib.CallOrDefault<std::string()>("ExternalSubscriberData");
+            }));
+
+  C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) { dlib.CallVoid<void()>("ExternalSubscriberTerminate"); });
+
+  EmitTo<Event_DL2TEST>(t, 401);
+
+  C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
+  EXPECT_EQ("101,201,301", C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) {
+              return dlib.CallOrDefault<std::string()>("ExternalSubscriberData");
+            }));
 }

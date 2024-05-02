@@ -6,10 +6,10 @@
 #include <typeindex>
 #include <unordered_set>
 
-#include "lib_c5t_lifetime_manager.h"
-
 // TODO: even more reasons for a `.cc` file!
+#include "bricks/sync/waitable_atomic.h"
 #include "bricks/sync/owned_borrowed.h"
+#include "bricks/util/singleton.h"
 
 #include "typesystem/types.h"  // For `crnt::CurrentSuper`.
 
@@ -35,6 +35,8 @@ class TopicKey final {
 
  public:
   TopicKey(ConstructTopicKey) : id_(GetNextUniqueTopicID()) {}
+  TopicKey(ConstructTopicKey, TopicID id) : id_(id) {}
+  static TopicKey FromID(TopicID id) { return TopicKey(ConstructTopicKey(), id); }
   TopicID GetTopicID() const { return id_; }
   operator TopicID() const { return GetTopicID(); }
 
@@ -148,8 +150,7 @@ class ActorSubscriberScopeForImpl final : public ActorSubscriberScopeImpl {
     }
 
     void Thread() {
-      auto const scope_term = C5T_LIFETIME_MANAGER_NOTIFY_OF_SHUTDOWN(
-          [this]() { wa.MutableUse([](ActorModelQueue& q) { q.done = true; }); });
+      // NOTE: it's on the user to stop subscriptions if the application is terminating
       while (true) {
         using r_t = std::pair<std::vector<std::function<void()>>, bool>;
         r_t const w = wa.Wait([](ActorModelQueue const& q) { return q.done || !q.fifo.empty(); },
@@ -338,6 +339,7 @@ class NullableActorSubscriberScope final {
 
  public:
   NullableActorSubscriberScope() = default;
+  NullableActorSubscriberScope(std::nullptr_t) {}
   NullableActorSubscriberScope(NullableActorSubscriberScope&&) = default;
   NullableActorSubscriberScope& operator=(NullableActorSubscriberScope&&) = default;
 
