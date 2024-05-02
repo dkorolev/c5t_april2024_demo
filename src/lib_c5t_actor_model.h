@@ -295,15 +295,15 @@ struct TopicKeys : TopicKeysOfType<TS>... {
   }
 
   template <class W>
-  [[nodiscard]] ActorSubscriberScopeFor<W> NewSubscribeWorkerTo(std::unique_ptr<W> worker) {
+  [[nodiscard]] ActorSubscriberScopeFor<W> InternalSubscribeWorkerTo(std::unique_ptr<W> worker) {
     ActorSubscriberScopeFor<W> res(ConstructTopicsSubscriberScope(), std::move(worker));
     SubscribeAllImpl<TS...>::DoSubscribeAll(res.ExtractImpl(), *this);
     return res;
   }
 
   template <class W, typename... ARGS>
-  [[nodiscard]] ActorSubscriberScopeFor<W> NewSubscribeTo(ARGS&&... args) {
-    return NewSubscribeWorkerTo<W>(std::make_unique<W>(std::forward<ARGS>(args)...));
+  [[nodiscard]] ActorSubscriberScopeFor<W> InternalSubscribeTo(ARGS&&... args) {
+    return InternalSubscribeWorkerTo<W>(std::make_unique<W>(std::forward<ARGS>(args)...));
   }
 };
 
@@ -391,3 +391,5 @@ inline C5T_ACTOR_MODEL_Interface& C5T_ACTOR_MODEL_INSTANCE() {
 inline void C5T_ACTOR_MODEL_INJECT(C5T_ACTOR_MODEL_Interface& injected) {
   current::Singleton<ActorModelInjectableInstance>().p = &injected;
 }
+
+#define C5T_SUBSCRIBE(topics, worker_t, ...) (topics).InternalSubscribeTo<worker_t>(__VA_ARGS__)
