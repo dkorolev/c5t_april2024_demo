@@ -78,6 +78,7 @@ TEST(StorageTest, MapStringString) {
 
   {
     ASSERT_FALSE(C5T_STORAGE(kv1).Has("k"));
+    ASSERT_EQ("nope", C5T_STORAGE(kv1).GetOrDefault("k", "nope"));
     ASSERT_THROW(C5T_STORAGE(kv1).GetOrThrow("k"), StorageKeyNotFoundException);
     ASSERT_FALSE(Exists(C5T_STORAGE(kv1).Get("k")));
   }
@@ -87,6 +88,8 @@ TEST(StorageTest, MapStringString) {
   {
     ASSERT_TRUE(C5T_STORAGE(kv1).Has("k"));
     EXPECT_EQ("v", C5T_STORAGE(kv1).GetOrThrow("k"));
+
+    ASSERT_EQ("v", C5T_STORAGE(kv1).GetOrDefault("k", "nope"));
 
     auto const o = C5T_STORAGE(kv1).Get("k");
     ASSERT_TRUE(Exists(o));

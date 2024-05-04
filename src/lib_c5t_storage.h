@@ -154,6 +154,15 @@ class C5T_STORAGE_FIELD_ACCESSOR final {
 
   bool Has(std::string key) const { return InnerGet(std::move(key)) != nullptr; }
 
+  T GetOrDefault(std::string key, T def = T()) const {
+    auto const& p = InnerGet(std::move(key));
+    if (p != nullptr) {
+      return *p;
+    } else {
+      return def;
+    }
+  }
+
   template <class E = StorageKeyNotFoundException, typename... ARGS>
   T const& GetOrThrow(std::string key, ARGS&&... args) const {
     auto const& p = InnerGet(std::move(key));
