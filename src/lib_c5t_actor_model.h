@@ -314,6 +314,7 @@ class ActorSubscriberScope final {
   ActorSubscriberScope(ActorSubscriberScope const&) = delete;
   ActorSubscriberScope& operator=(ActorSubscriberScope const&) = delete;
 
+  friend class NullableActorSubscriberScope;
   std::unique_ptr<ActorSubscriberScopeImpl> type_erased_impl_;
 
  public:
@@ -352,10 +353,17 @@ class NullableActorSubscriberScope final {
     return *this;
   }
 
+  NullableActorSubscriberScope& operator=(ActorSubscriberScope&& rhs) {
+    type_erased_impl_ = std::move(rhs.type_erased_impl_);
+    return *this;
+  }
+
   NullableActorSubscriberScope& operator=(std::nullptr_t) {
     type_erased_impl_ = nullptr;
     return *this;
   }
+
+  operator bool() const { return type_erased_impl_ != nullptr; }
 };
 
 template <class T, class... ARGS>

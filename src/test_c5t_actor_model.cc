@@ -165,6 +165,39 @@ TEST(ActorModelTest, Smoke) {
   }
 }
 
+TEST(ActorModelTest, Nullable) {
+  auto const b = Topic<TestEvent<'b'>>("b");
+
+  std::ostringstream oss;
+  ActorSubscriberScope s1 = C5T_SUBSCRIBE<TestWorker>(b, oss);
+
+  NullableActorSubscriberScope s2;
+  NullableActorSubscriberScope s3(nullptr);
+  s2 = nullptr;
+  EXPECT_FALSE(s2);
+  EXPECT_FALSE(s3);
+
+  s2 = std::move(s1);
+  EXPECT_TRUE(s2);
+  EXPECT_FALSE(s3);
+
+  s3 = std::move(s2);
+  EXPECT_FALSE(s2);
+  EXPECT_TRUE(s3);
+
+  oss.clear();
+  C5T_EMIT<TestEvent<'b'>>(b, 501);
+  C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
+  EXPECT_EQ("b501", oss.str());
+
+  s3 = nullptr;
+  EXPECT_FALSE(s2);
+  EXPECT_FALSE(s3);
+  C5T_EMIT<TestEvent<'b'>>(b, 502);
+  C5T_ACTORS_DEBUG_WAIT_FOR_ALL_EVENTS_TO_PROPAGATE();
+  EXPECT_EQ("b501", oss.str());
+}
+
 TEST(ActorModelTest, InjectedFromDLib) {
   EXPECT_EQ(42,
             C5T_DLIB_CALL("test_actor_model", [&](C5T_DLib& dlib) { return dlib.CallOrDefault<int()>("Smoke42"); }));
