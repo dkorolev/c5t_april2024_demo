@@ -42,7 +42,19 @@ class TopicKey final {
  public:
   TopicKey(ConstructTopicKey) : id_(GetNextUniqueTopicID()) {}
   TopicKey(ConstructTopicKey, TopicID id) : id_(id) {}
+
   static TopicKey FromID(TopicID id) { return TopicKey(ConstructTopicKey(), id); }
+  static TopicKey Uninitialized() { return TopicKey(ConstructTopicKey(), static_cast<TopicID>(-1)); }
+
+  void AssignOnce(TopicKey rhs) {
+    if (id_ == static_cast<TopicID>(-1) && rhs.id_ != static_cast<TopicID>(-1)) {
+      id_ = rhs.id_;
+    } else {
+      std::cerr << "FATAL: `AssignOnce` is not once." << std::endl;
+      ::abort();
+    }
+  }
+
   TopicID GetTopicID() const { return id_; }
   operator TopicID() const { return GetTopicID(); }
 
