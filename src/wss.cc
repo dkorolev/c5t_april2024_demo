@@ -13,7 +13,10 @@
 #include "lib_c5t_popen2.h"  // IWYU pragma: keep
 
 CURRENT_STRUCT(StopResponseSchema) { CURRENT_FIELD(msg, std::string); };
-CURRENT_STRUCT(SumResponseSchema) { CURRENT_FIELD(sum, int64_t); };
+CURRENT_STRUCT(SumResponseSchema) {
+  CURRENT_FIELD(sum, int64_t);
+  CURRENT_FIELD(pw, Optional<std::string>);
+};
 
 inline std::string BasePathOf(std::string const& s) {
   std::vector<std::string> parts = current::strings::Split(s, current::FileSystem::GetPathSeparator());
@@ -121,8 +124,10 @@ int main(int argc, char** argv) {
     using namespace current::htmlform;
     if (r.method == "GET") {
       auto const f = Form()
-                         .Add(Field("a").Text("First summand").Placeholder("3 for example"))   //.Value("3"))
-                         .Add(Field("b").Text("Second summand").Placeholder("4 for example"))  // .Value("4"))
+                         .Add(Field("a").Text("First summand").Placeholder("3 for example").Value("3"))
+                         .Add(Field("b").Text("Second summand").Placeholder("4 for example"))
+                         .Add(Field("c").Text("Read-only caption").Value("Read-only text").Readonly())
+                         .Add(Field("d").Text("Password caption").PasswordProtected())
                          .Title("Current Sum")
                          .Caption("Sum")
                          .ButtonText("Add")
@@ -131,13 +136,16 @@ int main(int argc, char** argv) {
         if (isNaN(a)) return { error: "A is not a number." };
         const b = parseInt(input.b);
         if (isNaN(b)) return { error: "B is not a number." };
-        return { sum: a + b };
+        return { sum: a + b, pw: String(input.d) };
       })");
       r(FormAsHTML(f), HTTPResponseCode.OK, current::net::constants::kDefaultHTMLContentType);
     } else {
       FormResponse res;
       try {
         auto const body = ParseJSON<SumResponseSchema>(r.body);
+        if (Exists(body.pw)) {
+          std::cout << "PW: " << Value(body.pw) << std::endl;
+        }
         res.fwd = "/is/" + current::ToString(body.sum);
       } catch (current::Exception& e) {
         res.msg = "error!";

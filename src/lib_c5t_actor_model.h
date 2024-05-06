@@ -333,13 +333,13 @@ struct TopicKeys : TopicKeysOfType<std::decay_t<TS>>... {
 };
 
 // TODO(dkorolev): TESTS for this!
-template<>
+template <>
 struct CopyForAllTypesImpl<> {
   template <typename LHS, typename RHS>
   static void DoCopyForAllTypes(LHS&&, RHS&&) {}
 };
 
-template<typename X, typename... XS>
+template <typename X, typename... XS>
 struct CopyForAllTypesImpl<X, XS...> {
   template <typename LHS, typename RHS>
   static void DoCopyForAllTypes(LHS&& lhs, RHS&& rhs) {

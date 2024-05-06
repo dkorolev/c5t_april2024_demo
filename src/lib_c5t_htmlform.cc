@@ -18,11 +18,20 @@ std::string current::htmlform::FormAsHTML(Form const& form) {
   oss << R"(
     <form id="form">)";
   for (auto const& f : form.fields) {
+    std::string input_type = "text";
+    if (Exists(f.type) && Value(f.type) == "password") {
+      input_type = "password";
+    }
     oss << R"(
       <p>)"
         << (Exists(f.text) ? Value(f.text) : f.id) << R"(</p>
       <input
-        type="text"
+        type=)" + input_type;
+    if (Exists(f.type) && Value(f.type) == "readonly") {
+      oss << R"(
+        disabled=disabled)";
+    }
+    oss << R"(
         autocomplete=false
         id=")"
         << f.id << '"';
