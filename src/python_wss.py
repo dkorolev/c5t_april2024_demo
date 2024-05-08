@@ -2,7 +2,7 @@
 #
 # This is a rather trivial websocker-to-{stdin/stdout} wrapper:
 #
-# - It listens on `localhost:9501`.
+# - It listens on `localhost:5556`.
 # - For each websocket connection
 #   - It prints "+${idx}" to stdout on it established,
 #   - It prints "-${idx}" to stdout on it closed,
@@ -49,7 +49,7 @@ async def ws2stdout_impl(s):
 
 async def ws2stdout():
   try:
-    async with serve(ws2stdout_impl, "localhost", 5556):
+    async with serve(ws2stdout_impl, "0.0.0.0", 5556):
       await asyncio.Future()
   except Exception as e:
     try:
