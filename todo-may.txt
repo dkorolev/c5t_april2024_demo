@@ -1,0 +1,13 @@
+tests for the most recently pushed actors code
+
+infer type in `.Use` intelligently, via SFINAE
+maybe even introduce `.Use` with multiple interfaces?
+
+also infer types for `EMIT` / `SUBSCRIBE`
+
+.Forget() in storage, for the whole collection and for the key
+with tests
+
+think of `IRequest` (or `IHasRequest`) as one of the standard interfaces?
+
+inject the instance of the lifetime mgr into `dlib`-first code?

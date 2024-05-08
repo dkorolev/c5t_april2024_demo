@@ -19,6 +19,12 @@ TopicID GetNextUniqueTopicID();
 template <class T>
 struct TopicKeysOfType {
   std::unordered_set<TopicID> topic_ids_;
+  // NOTE(dkorolev): likely unnecessary!
+  TopicKeysOfType() = default;
+  TopicKeysOfType(TopicKeysOfType const&) = default;
+  TopicKeysOfType(TopicKeysOfType&&) = default;
+  TopicKeysOfType& operator=(TopicKeysOfType const&) = default;
+  TopicKeysOfType& operator=(TopicKeysOfType&&) = default;
 };
 
 template <class... TS>
@@ -36,7 +42,19 @@ class TopicKey final {
  public:
   TopicKey(ConstructTopicKey) : id_(GetNextUniqueTopicID()) {}
   TopicKey(ConstructTopicKey, TopicID id) : id_(id) {}
+
   static TopicKey FromID(TopicID id) { return TopicKey(ConstructTopicKey(), id); }
+  static TopicKey Uninitialized() { return TopicKey(ConstructTopicKey(), static_cast<TopicID>(-1)); }
+
+  void AssignOnce(TopicKey rhs) {
+    if (id_ == static_cast<TopicID>(-1) && rhs.id_ != static_cast<TopicID>(-1)) {
+      id_ = rhs.id_;
+    } else {
+      std::cerr << "FATAL: `AssignOnce` is not once." << std::endl;
+      ::abort();
+    }
+  }
+
   TopicID GetTopicID() const { return id_; }
   operator TopicID() const { return GetTopicID(); }
 
@@ -46,7 +64,7 @@ class TopicKey final {
     return res;
   }
 
-  template <class T2, class = std::enable_if_t<std::is_same_v<T2, T>>>
+  template <class T2, class ENABLE = std::enable_if_t<std::is_same_v<T2, T>>>
   TopicKeys<T> operator+(TopicKey<T2> t2) const {
     TopicKeys<T> res;
     res.template Insert<T>(id_);
@@ -54,7 +72,7 @@ class TopicKey final {
     return res;
   }
 
-  template <class T2, class = std::enable_if_t<!std::is_same_v<T2, T>>>
+  template <class T2, class ENABLE = std::enable_if_t<!std::is_same_v<T2, T>>>
   TopicKeys<T, T2> operator+(TopicKey<T2> t2) const {
     TopicKeys<T, T2> res;
     res.template Insert<T>(id_);
@@ -272,25 +290,32 @@ struct SubscribeAllImpl<> final {
   static void DoSubscribeAll(SCOPE&, TOPICS&) {}
 };
 
+template <class...>
+struct CopyForAllTypesImpl;
+
 template <class... TS>
-struct TopicKeys : TopicKeysOfType<TS>... {
+struct TopicKeys : TopicKeysOfType<std::decay_t<TS>>... {
  public:
-  template <class T, class = std::enable_if_t<std::is_base_of_v<TopicKeysOfType<T>, TopicKeys>>>
+  // TODO(dkorolev): re-add this constraint
+  template <class T>  //, class ENABLE = std::enable_if_t<std::is_base_of_v<TopicKeysOfType<std::decay<T>>, TopicKeys>>>
   void Insert(TopicID tid) {
-    TopicKeysOfType<T>::topic_ids_.insert(tid);
+    TopicKeysOfType<std::decay_t<T>>::topic_ids_.insert(tid);
   }
 
-  template <class T, class = std::enable_if_t<std::is_base_of_v<TopicKeysOfType<T>, TopicKeys>>>
+  // TODO(dkorolev): TESTS for this!
+  template <class T, class ENABLE = std::enable_if_t<std::is_base_of_v<TopicKeysOfType<std::decay_t<T>>, TopicKeys>>>
   TopicKeys<TS...> operator+(TopicKey<T> t) const {
-    TopicKeys<T> res = *this;
-    res.template Insert<T>(t.id_);
+    TopicKeys<TS...> res;
+    CopyForAllTypesImpl<std::decay_t<TS>...>::DoCopyForAllTypes(res, *this);
+    res.template Insert<std::decay_t<T>>(t.GetTopicID());
     return res;
   }
 
-  template <class T, class = std::enable_if_t<!std::is_base_of_v<TopicKeysOfType<T>, TopicKeys>>>
-  TopicKeys<TS..., T> operator+(TopicKey<T> t) const {
-    TopicKeys<TS..., T> res = *this;
-    res.template Insert<T>(t.id_);
+  template <class T, class ENABLE = std::enable_if_t<!std::is_base_of_v<TopicKeysOfType<std::decay_t<T>>, TopicKeys>>>
+  TopicKeys<TS..., std::decay_t<T>> operator+(TopicKey<T> t) const {
+    TopicKeys<TS..., std::decay_t<T>> res;
+    CopyForAllTypesImpl<std::decay_t<TS>...>::DoCopyForAllTypes(res, *this);
+    res.template Insert<std::decay_t<T>>(t.GetTopicID());
     return res;
   }
 
@@ -304,6 +329,22 @@ struct TopicKeys : TopicKeysOfType<TS>... {
   template <class W, typename... ARGS>
   [[nodiscard]] ActorSubscriberScopeFor<W> InternalSubscribeTo(ARGS&&... args) const {
     return InternalSubscribeWorkerTo<W>(std::make_unique<W>(std::forward<ARGS>(args)...));
+  }
+};
+
+// TODO(dkorolev): TESTS for this!
+template <>
+struct CopyForAllTypesImpl<> {
+  template <typename LHS, typename RHS>
+  static void DoCopyForAllTypes(LHS&&, RHS&&) {}
+};
+
+template <typename X, typename... XS>
+struct CopyForAllTypesImpl<X, XS...> {
+  template <typename LHS, typename RHS>
+  static void DoCopyForAllTypes(LHS&& lhs, RHS&& rhs) {
+    static_cast<TopicKeysOfType<X>&>(lhs) = static_cast<TopicKeysOfType<X> const&>(rhs);
+    CopyForAllTypesImpl<XS...>::DoCopyForAllTypes(std::forward<LHS>(lhs), std::forward<RHS>(rhs));
   }
 };
 

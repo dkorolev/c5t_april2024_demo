@@ -25,6 +25,7 @@ CURRENT_STRUCT(Field) {
   CURRENT_FIELD(text, Optional<std::string>);
   CURRENT_FIELD(placeholder, Optional<std::string>);
   CURRENT_FIELD(value, Optional<std::string>);
+  CURRENT_FIELD(type, Optional<std::string>);
 
   CURRENT_CONSTRUCTOR(Field)(std::string id = "id") : id(std::move(id)) {}
 
@@ -38,6 +39,14 @@ CURRENT_STRUCT(Field) {
   }
   Field& Value(std::string s) {
     value = std::move(s);
+    return *this;
+  }
+  Field& Readonly() {
+    type = "readonly";
+    return *this;
+  }
+  Field& PasswordProtected() {
+    type = "password";
     return *this;
   }
 };
