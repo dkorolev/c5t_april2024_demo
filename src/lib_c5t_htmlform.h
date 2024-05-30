@@ -25,7 +25,9 @@ CURRENT_STRUCT(Field) {
   CURRENT_FIELD(text, Optional<std::string>);
   CURRENT_FIELD(placeholder, Optional<std::string>);
   CURRENT_FIELD(value, Optional<std::string>);
-  CURRENT_FIELD(type, Optional<std::string>);
+  CURRENT_FIELD(type, Optional<std::string>);  // can be unset, "readonly", "password", or "select"
+  CURRENT_FIELD(options, Optional<std::vector<std::string>>);
+  CURRENT_FIELD(default_option, Optional<std::string>);
 
   CURRENT_CONSTRUCTOR(Field)(std::string id = "id") : id(std::move(id)) {}
 
@@ -47,6 +49,18 @@ CURRENT_STRUCT(Field) {
   }
   Field& PasswordProtected() {
     type = "password";
+    return *this;
+  }
+  Field& Select(std::vector<std::string> arg_options) {
+    type = "select";
+    options = std::move(arg_options);
+    default_option = nullptr;
+    return *this;
+  }
+  Field& Select(std::vector<std::string> arg_options, std::string arg_default_option) {
+    type = "select";
+    options = std::move(arg_options);
+    default_option = std::move(arg_default_option);
     return *this;
   }
 };

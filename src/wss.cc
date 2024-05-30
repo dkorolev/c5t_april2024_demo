@@ -14,8 +14,9 @@
 
 CURRENT_STRUCT(StopResponseSchema) { CURRENT_FIELD(msg, std::string); };
 CURRENT_STRUCT(SumResponseSchema) {
-  CURRENT_FIELD(sum, int64_t);
+  CURRENT_FIELD(result, int64_t);
   CURRENT_FIELD(pw, Optional<std::string>);
+  CURRENT_FIELD(op, Optional<std::string>);
 };
 
 inline std::string BasePathOf(std::string const& s) {
@@ -124,6 +125,7 @@ int main(int argc, char** argv) {
     using namespace current::htmlform;
     if (r.method == "GET") {
       auto const f = Form()
+                         .Add(Field("e").Text("Operation").Select({"mul", "add"}, "add"))
                          .Add(Field("a").Text("First summand").Placeholder("3 for example").Value("3"))
                          .Add(Field("b").Text("Second summand").Placeholder("4 for example"))
                          .Add(Field("c").Text("Read-only caption").Value("Read-only text").Readonly())
@@ -136,7 +138,7 @@ int main(int argc, char** argv) {
         if (isNaN(a)) return { error: "A is not a number." };
         const b = parseInt(input.b);
         if (isNaN(b)) return { error: "B is not a number." };
-        return { sum: a + b, pw: String(input.d) };
+        return { result: (input.e === "mul" ? a * b : a + b), pw: String(input.d), op: input.e };
       })");
       r(FormAsHTML(f), HTTPResponseCode.OK, current::net::constants::kDefaultHTMLContentType);
     } else {
@@ -146,7 +148,10 @@ int main(int argc, char** argv) {
         if (Exists(body.pw)) {
           std::cout << "PW: " << Value(body.pw) << std::endl;
         }
-        res.fwd = "/is/" + current::ToString(body.sum);
+        if (Exists(body.op)) {
+          std::cout << "OP: " << Value(body.op) << std::endl;
+        }
+        res.fwd = "/is/" + current::ToString(body.result);
       } catch (current::Exception& e) {
         res.msg = "error!";
       }
@@ -155,7 +160,7 @@ int main(int argc, char** argv) {
   });
 
   routes += http.Register(
-      "/sum/is", URLPathArgs::CountMask::One, [](Request r) { r("the sum is " + r.url_path_args[0] + '\n'); });
+      "/sum/is", URLPathArgs::CountMask::One, [](Request r) { r("the result is " + r.url_path_args[0] + '\n'); });
 
   routes += http.Register("/dlib", [](Request r) {
     std::ostringstream oss;
