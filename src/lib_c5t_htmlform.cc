@@ -1,5 +1,7 @@
 #include "lib_c5t_htmlform.h"  // IWYU pragma: keep
 
+#include "typesystem/serialization/json/primitives.h"  // IWYU pragma: keep
+
 #include <sstream>
 
 std::string current::htmlform::FormAsHTML(Form const& form) {
@@ -18,37 +20,51 @@ std::string current::htmlform::FormAsHTML(Form const& form) {
   oss << R"(
     <form id="form">)";
   for (auto const& f : form.fields) {
-    std::string input_type = "text";
-    if (Exists(f.type) && Value(f.type) == "password") {
-      input_type = "password";
-    }
     oss << R"(
       <p>)"
-        << (Exists(f.text) ? Value(f.text) : f.id) << R"(</p>
-      <input
-        type=)" + input_type;
-    if (Exists(f.type) && Value(f.type) == "readonly") {
+        << (Exists(f.text) ? Value(f.text) : f.id) << R"(</p>)";
+    std::string input_type = Exists(f.type) ? Value(f.type) : "text";
+    if (input_type == "select" && Exists(f.options) && !Value(f.options).empty()) {
+      std::string const default_option = Exists(f.default_option) ? Value(f.default_option) : Value(f.options).front();
       oss << R"(
-        disabled=disabled)";
-    }
-    oss << R"(
-        autocomplete=false
-        id=")"
-        << f.id << '"';
-    if (Exists(f.placeholder)) {
+        <select id=")"
+          << f.id << "\">";
+      for (auto const& o : Value(f.options)) {
+        oss << R"(
+          <option value=)"
+            << JSON(o) << (o == default_option ? " selected>" : ">") << o << "</option>";
+      }
       oss << R"(
-        placeholder=")"
-          << Value(f.placeholder) << '"';
-    }
-    if (Exists(f.value)) {
+        </select>
+        <br>)";
+    } else {
       oss << R"(
-        value=")"
-          << Value(f.value) << '"';
+        <input
+          type=)" +
+                 input_type;
+      if (Exists(f.type) && Value(f.type) == "readonly") {
+        oss << R"(
+          disabled=disabled)";
+      }
+      oss << R"(
+          autocomplete=false
+          id=")"
+          << f.id << '"';
+      if (Exists(f.placeholder)) {
+        oss << R"(
+          placeholder=")"
+            << Value(f.placeholder) << '"';
+      }
+      if (Exists(f.value)) {
+        oss << R"(
+          value=")"
+            << Value(f.value) << '"';
+      }
+      oss << R"(
+          size="100"
+        />
+        <br>)";
     }
-    oss << R"(
-        size="100"
-      />
-      <br>)";
   }
   oss << R"(
       <br>
