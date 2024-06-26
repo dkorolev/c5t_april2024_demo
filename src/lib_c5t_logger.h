@@ -72,7 +72,7 @@ struct C5T_LOGGER_SINGLETON_Holder final {
       return C5T_LOGGER_CREATE_SINGLETON();
 #else
       std::cerr << "FATAL: No logger initialized.\n";
-      *reinterpret_cast<int*>(0) = 42;
+      __builtin_trap();
 #endif
     }
     return *ptr;

@@ -425,11 +425,18 @@ struct ActorModelInjectableInstance final {
   std::atomic<C5T_ACTOR_MODEL_Interface*> p = std::atomic<C5T_ACTOR_MODEL_Interface*>(nullptr);
   C5T_ACTOR_MODEL_Interface& Get() {
     if (!p) {
+#ifndef C5T_DLIB
       p = &GetSingleton();
+#else
+      std::cerr << "FATAL: No actor model.\n";
+      __builtin_trap();
+#endif
     }
     return *p;
   }
+#ifndef C5T_DLIB
   C5T_ACTOR_MODEL_Interface& GetSingleton();
+#endif
 };
 
 inline C5T_ACTOR_MODEL_Interface& C5T_ACTOR_MODEL_INSTANCE() {
