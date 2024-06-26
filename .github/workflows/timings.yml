@@ -12,7 +12,7 @@ jobs:
   run:
     strategy:
       matrix:
-        os: [ubuntu-latest]  #, macos-latest]
+        os: [ubuntu-latest, macos-latest]
         test_make_target: [release, debug]
     runs-on: ${{ matrix.os }}
     steps:
