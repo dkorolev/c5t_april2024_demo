@@ -64,6 +64,7 @@ struct C5T_LOGGER_SINGLETON_Holder final {
     ptr = &impl;
     return impl;
   }
+  template <int _ = 0>
   C5T_LOGGER_SINGLETON_Interface& Val() {
     if (ptr == nullptr) {
       return C5T_LOGGER_CREATE_SINGLETON();
