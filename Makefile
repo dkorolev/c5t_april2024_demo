@@ -56,7 +56,7 @@ fmt:
 	${CLANG_FORMAT} -i src/*.cc src/*.h
 
 CMakeLists.txt:
-	@curl -s https://raw.githubusercontent.com/dimacurrentai/Current/c5t_dlib_symbol/cmake/CMakeLists.txt >$@
+	@curl -s https://raw.githubusercontent.com/C5T/Current/stable/cmake/CMakeLists.txt >$@
 
 .gitignore:
 	@touch .gitignore
