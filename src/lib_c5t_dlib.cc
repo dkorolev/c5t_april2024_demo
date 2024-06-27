@@ -66,9 +66,9 @@ class C5T_DLib_Impl final : public C5T_DLib {
 };
 
 inline decltype(auto) StructStatIntoKey(struct stat const& data) {
-#ifndef APPLE
+#ifndef CURRENT_APPLE
   return std::make_tuple(data.st_ino, data.st_mtim.tv_sec, data.st_mtim.tv_nsec);
-#else  // APPLE
+#else  // CURRENT_APPLE
   return std::make_tuple(data.st_ino, data.st_mtimespec.tv_sec, data.st_mtimespec.tv_nsec);
 #endif
 }

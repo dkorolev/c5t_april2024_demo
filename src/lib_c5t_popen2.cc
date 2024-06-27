@@ -141,9 +141,9 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
     return std::thread(
         [](std::function<void(const std::string)> cb_line, int read_fd, int terminate_fd) {
           struct pollfd fds[2];
-          fds[0].fd = read_fd;
+          fds[0].fd = terminate_fd;
           fds[0].events = POLLIN;
-          fds[1].fd = terminate_fd;
+          fds[1].fd = read_fd;
           fds[1].events = POLLIN;
 
           char buf[1000];
@@ -153,6 +153,9 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
           while (true) {
             ::poll(fds, 2, -1);
             if (fds[0].revents & POLLIN) {
+              // NOTE(dkorolev): Termination signaled.
+              break;
+            } else if (fds[1].revents & POLLIN) {
               ssize_t const n = ::read(read_fd, buf, sizeof(buf) - 1);
               if (n < 0) {
                 // NOTE(dkorolev): This may or may not be a major issue.
@@ -161,10 +164,6 @@ void C5T_POPEN2(std::vector<std::string> const& cmdline,
               }
               buf[n] = '\0';
               grouper.Feed(buf);
-            } else if (fds[1].revents & POLLIN) {
-              // NOTE(dkorolev): Termination signaled.
-              // std::cerr << __LINE__ << std::endl;
-              break;
             }
           }
         },
