@@ -10,26 +10,26 @@
 
 TEST(Popen2Test, Smoke) {
   std::string result;
-  C5T_POPEN2({"/usr/bin/bash", "-c", "echo PASS"}, [&result](std::string const& line) { result = line; });
+  C5T_POPEN2({"bash", "-c", "echo PASS"}, [&result](std::string const& line) { result = line; });
   EXPECT_EQ(result, "PASS");
 }
 
 TEST(Popen2Test, WithDelay) {
   std::string result;
-  C5T_POPEN2({"/usr/bin/bash", "-c", "sleep 0.01; echo PASS2"}, [&result](std::string const& line) { result = line; });
+  C5T_POPEN2({"bash", "-c", "sleep 0.01; echo PASS2"}, [&result](std::string const& line) { result = line; });
   EXPECT_EQ(result, "PASS2");
 }
 
 TEST(Popen2Test, InnerBashBecauseParentheses) {
   std::string result;
-  C5T_POPEN2({"/usr/bin/bash", "-c", "(sleep 0.01; echo PASS3)"},
+  C5T_POPEN2({"bash", "-c", "(sleep 0.01; echo PASS3)"},
              [&result](std::string const& line) { result = line; });
   EXPECT_EQ(result, "PASS3");
 }
 
 TEST(Popen2Test, ThreePrints) {
   std::string result;
-  C5T_POPEN2({"/usr/bin/bash", "-c", "echo ONE; sleep 0.01; echo TWO; sleep 0.01; echo THREE"},
+  C5T_POPEN2({"bash", "-c", "echo ONE; sleep 0.01; echo TWO; sleep 0.01; echo THREE"},
              [&result](std::string const& line) { result += line + ' '; });
   ASSERT_EQ(result, "ONE TWO THREE ");
 }
@@ -37,7 +37,7 @@ TEST(Popen2Test, ThreePrints) {
 TEST(Popen2Test, KillsSuccessfully) {
   bool nope = false;
   C5T_POPEN2(
-      {"/usr/bin/bash", "-c", "sleep 10; echo NOPE"},
+      {"bash", "-c", "sleep 10; echo NOPE"},
       [&nope](std::string const&) { nope = true; },
       [](Popen2Runtime& run) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -49,7 +49,7 @@ TEST(Popen2Test, KillsSuccessfully) {
 TEST(Popen2Test, ReadsStdin) {
   std::string c;
   C5T_POPEN2(
-      {"/usr/bin/bash", "-c", "read A; read B; echo $((A+B))"},
+      {"bash", "-c", "read A; read B; echo $((A+B))"},
       [&c](std::string const& line) { c = line; },
       [](Popen2Runtime& run) { run("1\n2\n"); });
   ASSERT_EQ(c, "3");
@@ -58,7 +58,7 @@ TEST(Popen2Test, ReadsStdin) {
 TEST(Popen2Test, ReadsStdinForever) {
   std::string result = "result:";
   C5T_POPEN2(
-      {"/usr/bin/bash",
+      {"bash",
        "-c",
        "while true; do read A; read B; C=$((A+B)); if [ $C == '0' ]; then exit; fi; echo $C; done"},
       [&result](std::string const& line) { result += ' ' + line; },
@@ -68,13 +68,13 @@ TEST(Popen2Test, ReadsStdinForever) {
 
 TEST(Popen2Test, MultipleOutputLines) {
   std::string result = "result:";
-  C5T_POPEN2({"/usr/bin/bash", "-c", "seq 10"}, [&result](std::string const& line) { result += ' ' + line; });
+  C5T_POPEN2({"bash", "-c", "seq 10"}, [&result](std::string const& line) { result += ' ' + line; });
   ASSERT_EQ(result, "result: 1 2 3 4 5 6 7 8 9 10");
 }
 
 TEST(Popen2Test, MultipleOutputLinesWithMath) {
   std::string result = "result:";
-  C5T_POPEN2({"/usr/bin/bash", "-c", "for i in $(seq 3 7) ; do echo $((i * i)) ; done"},
+  C5T_POPEN2({"bash", "-c", "for i in $(seq 3 7) ; do echo $((i * i)) ; done"},
              [&result](std::string const& line) { result += ' ' + line; });
   ASSERT_EQ(result, "result: 9 16 25 36 49");
 }
@@ -88,7 +88,7 @@ TEST(Popen2Test, ReadsStdinAndCanBeKilled) {
   current::WaitableAtomic<Ctx> ctx;
   std::thread t([&ctx]() {
     C5T_POPEN2(
-        {"/usr/bin/bash", "-c", "while true; do read A; read B; C=$((A+B)); echo $C; done"},
+        {"bash", "-c", "while true; do read A; read B; C=$((A+B)); echo $C; done"},
         [&ctx](std::string const& line) {
           ctx.MutableScopedAccessor()->sums.push_back(current::FromString<int>(line));
         },
@@ -123,7 +123,7 @@ TEST(Popen2Test, Stderr) {
   std::string text_stdout;
   std::string text_stderr;
   C5T_POPEN2(
-      {"/usr/bin/bash", "-c", "echo out; echo err >/dev/stderr"},
+      {"bash", "-c", "echo out; echo err >/dev/stderr"},
       [&text_stdout](std::string const& s) { text_stdout = s; },
       [](Popen2Runtime&) {},
       [&text_stderr](std::string const& s) { text_stderr = s; });
@@ -134,7 +134,7 @@ TEST(Popen2Test, Stderr) {
 TEST(Popen2Test, Env) {
   std::string result;
   C5T_POPEN2(
-      {"/usr/bin/bash", "-c", "echo $FOO"},
+      {"bash", "-c", "echo $FOO"},
       [&result](std::string const& s) { result = s; },
       [](Popen2Runtime&) {},
       [](std::string const& unused_stderr) { static_cast<void>(unused_stderr); },

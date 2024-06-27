@@ -55,8 +55,10 @@ struct C5T_LOGGER_SINGLETON_Interface {
   virtual C5T_LOGGER_Interface& operator[](std::string const& log_file_name) = 0;
 };
 
+#ifndef C5T_DLIB
 // NOTE(dkorolev): This is deliberately not "pimpl", since it's not to be used from `dlib_*.cc` sources!
 C5T_LOGGER_SINGLETON_Interface& C5T_LOGGER_CREATE_SINGLETON();
+#endif
 
 struct C5T_LOGGER_SINGLETON_Holder final {
   C5T_LOGGER_SINGLETON_Interface* ptr = nullptr;
@@ -66,7 +68,12 @@ struct C5T_LOGGER_SINGLETON_Holder final {
   }
   C5T_LOGGER_SINGLETON_Interface& Val() {
     if (ptr == nullptr) {
+#ifndef C5T_DLIB
       return C5T_LOGGER_CREATE_SINGLETON();
+#else
+      std::cerr << "FATAL: No logger initialized.\n";
+      __builtin_trap();
+#endif
     }
     return *ptr;
   }
@@ -87,7 +94,9 @@ void C5T_LOGGER_USE(T&& wrapper) {
   C5T_LOGGER_USE(wrapper.Logger());
 }
 
+#ifndef C5T_DLIB
 inline void C5T_LOGGER_SET_LOGS_DIR(std::string dir) { current::logger::C5T_LOGGER_CREATE_SINGLETON().SetLogsDir(dir); }
+#endif
 
 #define C5T_LOGGER_LIST(cb) C5T_LOGGER().C5T_LOGGER_LIST_Impl(cb)
 #define C5T_LOGGER_FIND(key, cb_found, cb_notfound) C5T_LOGGER().C5T_LOGGER_FIND_Impl(key, cb_found, cb_notfound)

@@ -4,8 +4,16 @@ TGT=${1:-release}
 
 set -e
 
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  echo 'NOTE: On MacOS time is only measured down to seconds. TODO(dkorolev): figure out how to use `date +%N` on MacOS.'
+fi
+
 function now_ms {
-  echo $(( $(date +%s%N) / 1000000 ))
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "$(date +%s)000"
+  else
+    echo $(( $(date +%s%N) / 1000000 ))
+  fi
 }
 
 echo 'Running `make '$TGT'` first.'
