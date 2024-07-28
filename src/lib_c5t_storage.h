@@ -1,5 +1,7 @@
 #pragma once
 
+// NOTE: NEED THREAD SAFETY AND ATOMIC OPERATIONS!!!
+
 // #define C5T_DEBUG_STORAGE
 
 #include <functional>

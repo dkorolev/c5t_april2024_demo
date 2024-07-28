@@ -22,8 +22,7 @@ TEST(Popen2Test, WithDelay) {
 
 TEST(Popen2Test, InnerBashBecauseParentheses) {
   std::string result;
-  C5T_POPEN2({"bash", "-c", "(sleep 0.01; echo PASS3)"},
-             [&result](std::string const& line) { result = line; });
+  C5T_POPEN2({"bash", "-c", "(sleep 0.01; echo PASS3)"}, [&result](std::string const& line) { result = line; });
   EXPECT_EQ(result, "PASS3");
 }
 
@@ -58,9 +57,7 @@ TEST(Popen2Test, ReadsStdin) {
 TEST(Popen2Test, ReadsStdinForever) {
   std::string result = "result:";
   C5T_POPEN2(
-      {"bash",
-       "-c",
-       "while true; do read A; read B; C=$((A+B)); if [ $C == '0' ]; then exit; fi; echo $C; done"},
+      {"bash", "-c", "while true; do read A; read B; C=$((A+B)); if [ $C == '0' ]; then exit; fi; echo $C; done"},
       [&result](std::string const& line) { result += ' ' + line; },
       [](Popen2Runtime& run) { run("1\n2\n3\n4\n0\n0\n"); });
   ASSERT_EQ(result, "result: 3 7");
